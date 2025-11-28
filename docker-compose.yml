@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "2323:2323"
-      - "9090:9090"
+      - "9091:9091"
     volumes:
       - ./config.yaml:/etc/easy-proxies/config.yaml:ro
       - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro

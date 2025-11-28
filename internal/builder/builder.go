@@ -25,12 +25,23 @@ func Build(cfg *config.Config) (option.Options, error) {
 	memberTags := make([]string, 0, len(cfg.Nodes))
 	metadata := make(map[string]poolout.MemberMeta)
 	var failedNodes []string
+	usedTags := make(map[string]int) // Track tag usage for uniqueness
 
 	for _, node := range cfg.Nodes {
-		tag := sanitizeTag(node.Name)
-		if tag == "" {
-			tag = fmt.Sprintf("node-%d", len(memberTags)+1)
+		baseTag := sanitizeTag(node.Name)
+		if baseTag == "" {
+			baseTag = fmt.Sprintf("node-%d", len(memberTags)+1)
 		}
+
+		// Ensure tag uniqueness by appending a counter if needed
+		tag := baseTag
+		if count, exists := usedTags[baseTag]; exists {
+			usedTags[baseTag] = count + 1
+			tag = fmt.Sprintf("%s-%d", baseTag, count+1)
+		} else {
+			usedTags[baseTag] = 1
+		}
+
 		outbound, err := buildNodeOutbound(tag, node.URI)
 		if err != nil {
 			log.Printf("❌ Failed to build node '%s': %v (skipping)", node.Name, err)
@@ -100,8 +111,7 @@ func Build(cfg *config.Config) (option.Options, error) {
 		if err != nil {
 			return option.Options{}, fmt.Errorf("parse multi-port address: %w", err)
 		}
-		for idx, tag := range memberTags {
-			node := cfg.Nodes[idx]
+		for _, tag := range memberTags {
 			meta := metadata[tag]
 			perMeta := map[string]poolout.MemberMeta{tag: meta}
 			poolTag := fmt.Sprintf("%s-%s", poolout.Tag, tag)
@@ -121,15 +131,11 @@ func Build(cfg *config.Config) (option.Options, error) {
 			inboundOptions := &option.HTTPMixedInboundOptions{
 				ListenOptions: option.ListenOptions{
 					Listen:     addr,
-					ListenPort: node.Port,
+					ListenPort: meta.Port,
 				},
 			}
-			username := node.Username
-			password := node.Password
-			if username == "" {
-				username = cfg.MultiPort.Username
-				password = cfg.MultiPort.Password
-			}
+			username := cfg.MultiPort.Username
+			password := cfg.MultiPort.Password
 			if username != "" {
 				inboundOptions.Users = []auth.User{{Username: username, Password: password}}
 			}

@@ -2,7 +2,9 @@ package monitor
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -15,10 +17,11 @@ var embeddedFS embed.FS
 
 // Server exposes HTTP endpoints for monitoring.
 type Server struct {
-	cfg    Config
-	mgr    *Manager
-	srv    *http.Server
-	logger *log.Logger
+	cfg          Config
+	mgr          *Manager
+	srv          *http.Server
+	logger       *log.Logger
+	sessionToken string // 简单的 session token，重启后失效
 }
 
 // NewServer constructs a server; it can be nil when disabled.
@@ -30,10 +33,18 @@ func NewServer(cfg Config, mgr *Manager, logger *log.Logger) *Server {
 		logger = log.Default()
 	}
 	s := &Server{cfg: cfg, mgr: mgr, logger: logger}
+
+	// 生成随机 session token
+	tokenBytes := make([]byte, 32)
+	rand.Read(tokenBytes)
+	s.sessionToken = hex.EncodeToString(tokenBytes)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
-	mux.HandleFunc("/api/nodes", s.handleNodes)
-	mux.HandleFunc("/api/nodes/", s.handleNodeAction)
+	mux.HandleFunc("/api/auth", s.handleAuth)
+	mux.HandleFunc("/api/nodes", s.withAuth(s.handleNodes))
+	mux.HandleFunc("/api/nodes/", s.withAuth(s.handleNodeAction))
+	mux.HandleFunc("/api/export", s.withAuth(s.handleExport))
 	s.srv = &http.Server{Addr: cfg.Listen, Handler: mux}
 	return s
 }
@@ -135,4 +146,104 @@ func writeJSON(w http.ResponseWriter, payload any) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(payload)
+}
+
+// withAuth 认证中间件，如果配置了密码则需要验证
+func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 如果没有配置密码，直接放行
+		if s.cfg.Password == "" {
+			next(w, r)
+			return
+		}
+
+		// 检查 Cookie 中的 session token
+		cookie, err := r.Cookie("session_token")
+		if err == nil && cookie.Value == s.sessionToken {
+			next(w, r)
+			return
+		}
+
+		// 检查 Authorization header (Bearer token)
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "" {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+			if token == s.sessionToken {
+				next(w, r)
+				return
+			}
+		}
+
+		// 未授权
+		w.WriteHeader(http.StatusUnauthorized)
+		writeJSON(w, map[string]any{"error": "未授权，请先登录"})
+	}
+}
+
+// handleAuth 处理登录认证
+func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
+	// 如果没有配置密码，直接返回成功（不需要token）
+	if s.cfg.Password == "" {
+		writeJSON(w, map[string]any{"message": "无需密码", "no_password": true})
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]any{"error": "请求格式错误"})
+		return
+	}
+
+	// 验证密码
+	if req.Password != s.cfg.Password {
+		w.WriteHeader(http.StatusUnauthorized)
+		writeJSON(w, map[string]any{"error": "密码错误"})
+		return
+	}
+
+	// 设置 cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    s.sessionToken,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   86400 * 7, // 7天
+	})
+
+	writeJSON(w, map[string]any{
+		"message": "登录成功",
+		"token":   s.sessionToken,
+	})
+}
+
+// handleExport 导出所有节点的 URI，每行一个
+func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	snapshots := s.mgr.Snapshot()
+	var lines []string
+
+	for _, snap := range snapshots {
+		if snap.URI != "" {
+			lines = append(lines, snap.URI)
+		}
+	}
+
+	// 返回纯文本，每行一个 URI
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=nodes.txt")
+	_, _ = w.Write([]byte(strings.Join(lines, "\n")))
 }

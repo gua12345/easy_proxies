@@ -8,7 +8,8 @@
 - **多种传输层**: TCP、WebSocket、HTTP/2、gRPC、HTTPUpgrade
 - **节点池模式**: 自动故障转移、负载均衡
 - **多端口模式**: 每个节点独立监听端口
-- **Web 监控面板**: 实时查看节点状态、延迟探测
+- **Web 监控面板**: 实时查看节点状态、延迟探测、一键导出节点
+- **密码保护**: WebUI 支持密码认证，保护节点信息安全
 - **灵活配置**: 支持配置文件和节点文件分离
 
 ## 快速开始
@@ -58,6 +59,7 @@ management:
   enabled: true
   listen: 0.0.0.0:9090        # Web 监控面板地址
   probe_target: www.apple.com:80  # 延迟探测目标
+  password: ""                # WebUI 访问密码，为空则不需要密码（可选）
 
 # 统一入口监听
 listener:
@@ -221,6 +223,22 @@ hysteria2://password@server:port?sni=example.com&insecure=0&obfs=salamander&obfs
 - 失败次数统计
 - 手动探测延迟
 - 解除节点拉黑
+- **一键导出节点**: 导出所有节点 URI 到 txt 文件
+
+### 密码保护
+
+为了保护节点信息安全，可以为 WebUI 设置访问密码：
+
+```yaml
+management:
+  enabled: true
+  listen: 0.0.0.0:9090
+  password: "your_secure_password"  # 设置 WebUI 访问密码
+```
+
+- 如果 `password` 为空或不设置，则无需密码即可访问
+- 设置密码后，首次访问会弹出登录界面
+- 登录成功后，session 会保存 7 天
 
 ## 端口说明
 

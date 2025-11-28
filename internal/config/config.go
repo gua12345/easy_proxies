@@ -52,6 +52,7 @@ type ManagementConfig struct {
 	Enabled     *bool  `yaml:"enabled"`
 	Listen      string `yaml:"listen"`
 	ProbeTarget string `yaml:"probe_target"`
+	Password    string `yaml:"password"` // WebUI 访问密码，为空则不需要密码
 }
 
 // NodeConfig describes a single upstream proxy endpoint expressed as URI.
