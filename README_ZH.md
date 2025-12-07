@@ -12,6 +12,7 @@
 - **订阅定时刷新**: 自动定时刷新订阅，支持 WebUI 手动触发（⚠️ 刷新会导致连接中断）
 - **节点池模式**: 自动故障转移、负载均衡
 - **多端口模式**: 每个节点独立监听端口
+- **混合模式**: 同时启用节点池 + 多端口，节点状态共享同步
 - **Web 监控面板**: 实时查看节点状态、延迟探测、一键导出节点
 - **密码保护**: WebUI 支持密码认证，保护节点信息安全
 - **自动健康检查**: 启动时自动检测所有节点可用性，定期（5分钟）检查节点状态
@@ -57,7 +58,7 @@ go build -tags "with_utls with_quic with_grpc" -o easy-proxies ./cmd/easy_proxie
 ### 基础配置
 
 ```yaml
-mode: pool                    # 运行模式: pool (节点池) 或 multi-port (多端口)
+mode: pool                    # 运行模式: pool (节点池)、multi-port (多端口) 或 hybrid (混合)
 log_level: info               # 日志级别: debug, info, warn, error
 external_ip: ""               # 外部 IP 地址，用于导出时替换 0.0.0.0（Docker 部署时建议配置）
 
@@ -164,6 +165,65 @@ nodes_file: nodes.txt
 **适用场景：** 需要指定特定节点、测试节点性能
 
 **使用方式：** 每个节点有独立的代理地址，可精确选择
+
+#### Hybrid 模式（混合模式）
+
+同时启用节点池和多端口模式，两者共享节点状态：
+
+```yaml
+mode: hybrid
+
+listener:
+  address: 0.0.0.0
+  port: 2323           # 节点池入口
+  username: user
+  password: pass
+
+multi_port:
+  address: 0.0.0.0
+  base_port: 24000     # 多端口起始端口
+  username: mpuser
+  password: mppass
+
+pool:
+  mode: balance        # sequential (顺序)、random (随机) 或 balance (负载均衡)
+  failure_threshold: 3
+  blacklist_duration: 24h
+```
+
+**启动时输出：**
+
+```
+📡 Proxy Links:
+═══════════════════════════════════════════════════════════════
+🌐 Pool Entry Point:
+   http://user:pass@0.0.0.0:2323
+
+   Nodes in pool (3):
+   • 台湾节点
+   • 香港节点
+   • 美国节点
+
+🔌 Multi-Port Entry Points (3 nodes):
+
+   [24000] 台湾节点
+       http://mpuser:mppass@0.0.0.0:24000
+   [24001] 香港节点
+       http://mpuser:mppass@0.0.0.0:24001
+   [24002] 美国节点
+       http://mpuser:mppass@0.0.0.0:24002
+═══════════════════════════════════════════════════════════════
+```
+
+**核心特性：**
+
+- **状态共享**: 节点黑名单状态在节点池和多端口之间同步
+  - 节点池中某节点失败被拉黑，多端口模式也会同步标记为不可用
+  - 健康检查结果同时更新两种模式
+- **端口自动重分配**: 如果端口被占用，自动分配下一个可用端口
+- **灵活访问**: 节点池用于负载均衡，多端口用于直连特定节点
+
+**适用场景：** 既需要自动故障转移，又需要直连特定节点
 
 ### 节点配置
 
@@ -379,9 +439,9 @@ subscription_refresh:
 
 | 端口 | 用途 |
 |------|------|
-| 2323 | 统一代理入口（节点池模式） |
+| 2323 | 统一代理入口（节点池/混合模式） |
 | 9090 | Web 监控面板 |
-| 24000+ | 多端口模式，每节点独立端口 |
+| 24000+ | 每节点独立端口（多端口/混合模式） |
 
 ## Docker 部署
 
@@ -402,7 +462,7 @@ services:
       - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro
 ```
 
-> **优点**: 容器直接使用主机网络，所有端口自动对外开放，无需手动配置端口映射。
+> **优点**: 容器直接使用主机网络，所有端口自动对外开放。端口自动重分配功能可完美工作。
 
 **方式二：端口映射模式**
 
@@ -416,15 +476,15 @@ services:
     container_name: easy-proxies
     restart: unless-stopped
     ports:
-      - "2323:2323"       # Pool 模式入口
+      - "2323:2323"       # 节点池/混合模式入口
       - "9091:9091"       # Web 监控面板
-      - "24000-24100:24000-24100"  # Multi-port 模式
+      - "24000-24200:24000-24200"  # 多端口/混合模式
     volumes:
       - ./config.yaml:/etc/easy-proxies/config.yaml:ro
       - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro
 ```
 
-> **注意**: 多端口模式需要映射对应的端口范围。如果有 N 个节点，需要开放 `24000` 到 `24000+N-1` 的端口。
+> **注意**: 多端口和混合模式需要映射足够的端口范围，建议预留一些缓冲端口用于自动重分配。
 
 ## 构建
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -126,9 +127,9 @@ func (c *Config) normalize() error {
 		c.Mode = "multi-port"
 	}
 	switch c.Mode {
-	case "pool", "multi-port":
+	case "pool", "multi-port", "hybrid":
 	default:
-		return fmt.Errorf("unsupported mode %q (use 'pool' or 'multi-port')", c.Mode)
+		return fmt.Errorf("unsupported mode %q (use 'pool', 'multi-port', or 'hybrid')", c.Mode)
 	}
 	if c.Listener.Address == "" {
 		c.Listener.Address = "0.0.0.0"
@@ -259,13 +260,23 @@ func (c *Config) normalize() error {
 			c.Nodes[idx].Name = fmt.Sprintf("node-%d", idx)
 		}
 
-		// Auto-assign port in multi-port mode
-		if c.Nodes[idx].Port == 0 {
+		// Auto-assign port in multi-port/hybrid mode, skip occupied ports
+		if c.Nodes[idx].Port == 0 && (c.Mode == "multi-port" || c.Mode == "hybrid") {
+			for !isPortAvailable(c.MultiPort.Address, portCursor) {
+				log.Printf("⚠️  Port %d is in use, trying next port", portCursor)
+				portCursor++
+				if portCursor > 65535 {
+					return fmt.Errorf("no available ports found starting from %d", c.MultiPort.BasePort)
+				}
+			}
+			c.Nodes[idx].Port = portCursor
+			portCursor++
+		} else if c.Nodes[idx].Port == 0 {
 			c.Nodes[idx].Port = portCursor
 			portCursor++
 		}
 
-		if c.Mode == "multi-port" {
+		if c.Mode == "multi-port" || c.Mode == "hybrid" {
 			if c.Nodes[idx].Username == "" {
 				c.Nodes[idx].Username = c.MultiPort.Username
 				c.Nodes[idx].Password = c.MultiPort.Password
@@ -275,6 +286,32 @@ func (c *Config) normalize() error {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
+
+	// Auto-fix port conflicts in hybrid mode (pool port vs multi-port)
+	if c.Mode == "hybrid" {
+		poolPort := c.Listener.Port
+		usedPorts := make(map[uint16]bool)
+		usedPorts[poolPort] = true
+		for idx := range c.Nodes {
+			usedPorts[c.Nodes[idx].Port] = true
+		}
+		for idx := range c.Nodes {
+			if c.Nodes[idx].Port == poolPort {
+				// Find next available port
+				newPort := c.Nodes[idx].Port + 1
+				for usedPorts[newPort] || !isPortAvailable(c.MultiPort.Address, newPort) {
+					newPort++
+					if newPort > 65535 {
+						return fmt.Errorf("no available port for node %q after conflict with pool port %d", c.Nodes[idx].Name, poolPort)
+					}
+				}
+				log.Printf("⚠️  Node %q port %d conflicts with pool port, reassigned to %d", c.Nodes[idx].Name, poolPort, newPort)
+				usedPorts[newPort] = true
+				c.Nodes[idx].Port = newPort
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -751,4 +788,15 @@ func (c *Config) SaveNodes() error {
 // This method is kept for backward compatibility but now delegates to SaveNodes.
 func (c *Config) Save() error {
 	return c.SaveNodes()
+}
+
+// isPortAvailable checks if a port is available for binding.
+func isPortAvailable(address string, port uint16) bool {
+	addr := fmt.Sprintf("%s:%d", address, port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return false
+	}
+	_ = ln.Close()
+	return true
 }

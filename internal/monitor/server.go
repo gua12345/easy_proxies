@@ -85,6 +85,7 @@ func NewServer(cfg Config, mgr *Manager, logger *log.Logger) *Server {
 	mux.HandleFunc("/api/nodes", s.withAuth(s.handleNodes))
 	mux.HandleFunc("/api/nodes/config", s.withAuth(s.handleConfigNodes))
 	mux.HandleFunc("/api/nodes/config/", s.withAuth(s.handleConfigNodeItem))
+	mux.HandleFunc("/api/nodes/probe-all", s.withAuth(s.handleProbeAll))
 	mux.HandleFunc("/api/nodes/", s.withAuth(s.handleNodeAction))
 	mux.HandleFunc("/api/export", s.withAuth(s.handleExport))
 	mux.HandleFunc("/api/subscription/status", s.withAuth(s.handleSubscriptionStatus))
@@ -205,6 +206,102 @@ func (s *Server) handleNodeAction(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleProbeAll probes all nodes in batches and returns results via SSE
+func (s *Server) handleProbeAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "SSE not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// Get all nodes
+	snapshots := s.mgr.Snapshot()
+	total := len(snapshots)
+	if total == 0 {
+		fmt.Fprintf(w, "data: %s\n\n", `{"type":"complete","total":0,"success":0,"failed":0}`)
+		flusher.Flush()
+		return
+	}
+
+	// Send start event
+	fmt.Fprintf(w, "data: %s\n\n", fmt.Sprintf(`{"type":"start","total":%d}`, total))
+	flusher.Flush()
+
+	// Probe all nodes concurrently
+	type probeResult struct {
+		tag     string
+		name    string
+		latency int64
+		err     string
+	}
+	results := make(chan probeResult, total)
+
+	// Launch all probes concurrently
+	for _, snap := range snapshots {
+		go func(snap Snapshot, mgr *Manager) {
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+			latency, err := mgr.Probe(ctx, snap.Tag)
+			if err != nil {
+				results <- probeResult{tag: snap.Tag, name: snap.Name, latency: -1, err: err.Error()}
+			} else {
+				results <- probeResult{tag: snap.Tag, name: snap.Name, latency: latency.Milliseconds(), err: ""}
+			}
+		}(snap, s.mgr)
+	}
+
+	// Collect results as they come in with overall timeout
+	successCount := 0
+	failedCount := 0
+	timeout := time.After(30 * time.Second) // Overall timeout for all probes
+
+	for i := 0; i < total; i++ {
+		select {
+		case result := <-results:
+			if result.err != "" {
+				failedCount++
+			} else {
+				successCount++
+			}
+			current := successCount + failedCount
+			progress := float64(current) / float64(total) * 100
+			eventData := fmt.Sprintf(`{"type":"progress","tag":"%s","name":"%s","latency":%d,"error":"%s","current":%d,"total":%d,"progress":%.1f}`,
+				result.tag, result.name, result.latency, result.err, current, total, progress)
+			fmt.Fprintf(w, "data: %s\n\n", eventData)
+			flusher.Flush()
+		case <-timeout:
+			// Overall timeout reached, report remaining nodes as timed out
+			remaining := total - (successCount + failedCount)
+			for j := 0; j < remaining; j++ {
+				failedCount++
+				current := successCount + failedCount
+				progress := float64(current) / float64(total) * 100
+				eventData := fmt.Sprintf(`{"type":"progress","tag":"unknown","name":"超时节点","latency":-1,"error":"overall timeout","current":%d,"total":%d,"progress":%.1f}`,
+					current, total, progress)
+				fmt.Fprintf(w, "data: %s\n\n", eventData)
+				flusher.Flush()
+			}
+			goto complete
+		}
+	}
+
+complete:
+
+	// Send complete event
+	fmt.Fprintf(w, "data: %s\n\n", fmt.Sprintf(`{"type":"complete","total":%d,"success":%d,"failed":%d}`, total, successCount, failedCount))
+	flusher.Flush()
+}
+
 func writeJSON(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
@@ -291,6 +388,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleExport 导出所有可用代理池节点的 HTTP 代理 URI，每行一个
+// 在 hybrid 模式下，只导出 multi-port 格式（每节点独立端口）
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -302,24 +400,27 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	var lines []string
 
 	for _, snap := range snapshots {
-		// 只导出有监听地址和端口的节点（代理池节点）
-		if snap.ListenAddress != "" && snap.Port > 0 {
-			// 使用外部 IP 替换 0.0.0.0
-			listenAddr := snap.ListenAddress
-			if (listenAddr == "0.0.0.0" || listenAddr == "::") && s.cfg.ExternalIP != "" {
-				listenAddr = s.cfg.ExternalIP
-			}
-
-			var proxyURI string
-			if s.cfg.ProxyUsername != "" && s.cfg.ProxyPassword != "" {
-				proxyURI = fmt.Sprintf("http://%s:%s@%s:%d",
-					s.cfg.ProxyUsername, s.cfg.ProxyPassword,
-					listenAddr, snap.Port)
-			} else {
-				proxyURI = fmt.Sprintf("http://%s:%d", listenAddr, snap.Port)
-			}
-			lines = append(lines, proxyURI)
+		// 只导出有监听地址和端口的节点
+		if snap.ListenAddress == "" || snap.Port == 0 {
+			continue
 		}
+
+		// 在 hybrid 和 multi-port 模式下，导出每节点独立端口
+		// 在 pool 模式下，所有节点共享同一端口，也正常导出
+		listenAddr := snap.ListenAddress
+		if (listenAddr == "0.0.0.0" || listenAddr == "::") && s.cfg.ExternalIP != "" {
+			listenAddr = s.cfg.ExternalIP
+		}
+
+		var proxyURI string
+		if s.cfg.ProxyUsername != "" && s.cfg.ProxyPassword != "" {
+			proxyURI = fmt.Sprintf("http://%s:%s@%s:%d",
+				s.cfg.ProxyUsername, s.cfg.ProxyPassword,
+				listenAddr, snap.Port)
+		} else {
+			proxyURI = fmt.Sprintf("http://%s:%d", listenAddr, snap.Port)
+		}
+		lines = append(lines, proxyURI)
 	}
 
 	// 返回纯文本，每行一个 URI

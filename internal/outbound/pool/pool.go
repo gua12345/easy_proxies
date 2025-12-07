@@ -8,7 +8,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"easy_proxies/internal/monitor"
@@ -60,12 +59,8 @@ func Register(registry *outbound.Registry) {
 type memberState struct {
 	outbound adapter.Outbound
 	tag      string
-
-	failures         int
-	blacklisted      bool
-	blacklistedUntil time.Time
-	active           atomic.Int32
-	entry            *monitor.EntryHandle
+	entry    *monitor.EntryHandle
+	shared   *sharedMemberState
 }
 
 type poolOutbound struct {
@@ -107,6 +102,9 @@ func newPool(ctx context.Context, _ adapter.Router, logger log.ContextLogger, ta
 	if monitorMgr != nil {
 		logger.Info("registering ", len(normalized.Members), " nodes to monitor")
 		for _, memberTag := range normalized.Members {
+			// Acquire shared state for this tag (creates if not exists)
+			state := acquireSharedState(memberTag)
+
 			meta := normalized.Metadata[memberTag]
 			info := monitor.NodeInfo{
 				Tag:           memberTag,
@@ -118,6 +116,8 @@ func newPool(ctx context.Context, _ adapter.Router, logger log.ContextLogger, ta
 			}
 			entry := monitorMgr.Register(info)
 			if entry != nil {
+				// Attach entry to shared state so all pool instances share it
+				state.attachEntry(entry)
 				logger.Info("registered node: ", memberTag)
 				// Set probe and release functions immediately
 				entry.SetRelease(p.makeReleaseByTagFunc(memberTag))
@@ -185,10 +185,17 @@ func (p *poolOutbound) initializeMembersLocked() error {
 		if !loaded {
 			return E.New("pool member not found: ", tag)
 		}
+
+		// Acquire shared state (creates if not exists, reuses if already created)
+		state := acquireSharedState(tag)
+
 		member := &memberState{
 			outbound: detour,
 			tag:      tag,
+			shared:   state,
+			entry:    state.entryHandle(),
 		}
+
 		// Connect to existing monitor entry if available
 		if p.monitor != nil {
 			meta := p.options.Metadata[tag]
@@ -202,12 +209,13 @@ func (p *poolOutbound) initializeMembersLocked() error {
 			}
 			entry := p.monitor.Register(info)
 			if entry != nil {
+				state.attachEntry(entry)
+				member.entry = entry
 				entry.SetRelease(p.makeReleaseFunc(member))
 				if probe := p.makeProbeFunc(member); probe != nil {
 					entry.SetProbe(probe)
 				}
 			}
-			member.entry = entry
 		}
 		members = append(members, member)
 	}
@@ -349,15 +357,8 @@ func (p *poolOutbound) pickMember(network string) (*memberState, error) {
 func (p *poolOutbound) availableMembersLocked(now time.Time, network string) []*memberState {
 	result := make([]*memberState, 0, len(p.members))
 	for _, member := range p.members {
-		if member.blacklisted && now.After(member.blacklistedUntil) {
-			member.blacklisted = false
-			member.blacklistedUntil = time.Time{}
-			member.failures = 0
-			if member.entry != nil {
-				member.entry.ClearBlacklist()
-			}
-		}
-		if member.blacklisted {
+		// Check blacklist via shared state (auto-clears if expired)
+		if member.shared != nil && member.shared.isBlacklisted(now) {
 			continue
 		}
 		if network != "" && !common.Contains(member.outbound.Network(), network) {
@@ -372,27 +373,16 @@ func (p *poolOutbound) releaseIfAllBlacklistedLocked(now time.Time) bool {
 	if len(p.members) == 0 {
 		return false
 	}
+	// Check if all members are blacklisted
 	for _, member := range p.members {
-		if !member.blacklisted {
+		if member.shared == nil || !member.shared.isBlacklisted(now) {
 			return false
 		}
-		if now.After(member.blacklistedUntil) {
-			member.blacklisted = false
-			member.blacklistedUntil = time.Time{}
-			member.failures = 0
-			if member.entry != nil {
-				member.entry.ClearBlacklist()
-			}
-		}
 	}
+	// All blacklisted, force release all
 	for _, member := range p.members {
-		if member.blacklisted {
-			member.blacklisted = false
-			member.blacklistedUntil = time.Time{}
-			member.failures = 0
-			if member.entry != nil {
-				member.entry.ClearBlacklist()
-			}
+		if member.shared != nil {
+			member.shared.forceRelease()
 		}
 	}
 	p.logger.Warn("all upstream proxies were blacklisted, releasing them for retry")
@@ -407,7 +397,10 @@ func (p *poolOutbound) selectMemberLocked(candidates []*memberState) *memberStat
 		var selected *memberState
 		var minActive int32
 		for _, member := range candidates {
-			active := member.active.Load()
+			var active int32
+			if member.shared != nil {
+				active = member.shared.activeCount()
+			}
 			if selected == nil || active < minActive {
 				selected = member
 				minActive = active
@@ -422,39 +415,21 @@ func (p *poolOutbound) selectMemberLocked(candidates []*memberState) *memberStat
 }
 
 func (p *poolOutbound) recordFailure(member *memberState, cause error) {
-	p.mu.Lock()
-	member.failures++
-	failures := member.failures
-	threshold := p.options.FailureThreshold
-	if failures >= threshold {
-		member.failures = 0
-		member.blacklisted = true
-		member.blacklistedUntil = time.Now().Add(p.options.BlacklistDuration)
+	if member.shared == nil {
+		p.logger.Warn("proxy ", member.tag, " failure (no shared state): ", cause)
+		return
 	}
-	p.mu.Unlock()
-
-	if member.entry != nil {
-		member.entry.RecordFailure(cause)
-		if failures >= threshold {
-			member.entry.Blacklist(member.blacklistedUntil)
-		}
-	}
-	if failures >= threshold {
+	failures, blacklisted, _ := member.shared.recordFailure(cause, p.options.FailureThreshold, p.options.BlacklistDuration)
+	if blacklisted {
 		p.logger.Warn("proxy ", member.tag, " blacklisted for ", p.options.BlacklistDuration, ": ", cause)
 	} else {
-		p.logger.Warn("proxy ", member.tag, " failure ", failures, "/", threshold, ": ", cause)
+		p.logger.Warn("proxy ", member.tag, " failure ", failures, "/", p.options.FailureThreshold, ": ", cause)
 	}
 }
 
 func (p *poolOutbound) recordSuccess(member *memberState) {
-	p.mu.Lock()
-	member.failures = 0
-	p.mu.Unlock()
-	if member.entry != nil {
-		member.entry.RecordSuccess()
-		if !member.blacklisted {
-			member.entry.ClearBlacklist()
-		}
+	if member.shared != nil {
+		member.shared.recordSuccess()
 	}
 }
 
@@ -472,13 +447,8 @@ func (p *poolOutbound) wrapPacketConn(conn net.PacketConn, member *memberState) 
 
 func (p *poolOutbound) makeReleaseFunc(member *memberState) func() {
 	return func() {
-		p.mu.Lock()
-		member.blacklisted = false
-		member.blacklistedUntil = time.Time{}
-		member.failures = 0
-		p.mu.Unlock()
-		if member.entry != nil {
-			member.entry.ClearBlacklist()
+		if member.shared != nil {
+			member.shared.forceRelease()
 		}
 	}
 }
@@ -489,10 +459,8 @@ func httpProbe(conn net.Conn, host string) (time.Duration, error) {
 	// Build HTTP request
 	req := fmt.Sprintf("GET /generate_204 HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nUser-Agent: Mozilla/5.0\r\n\r\n", host)
 
-	// Set write deadline
-	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		return 0, err
-	}
+	// Try to set write deadline (ignore errors for connections that don't support it)
+	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 
 	// Record time just before sending request
 	start := time.Now()
@@ -502,10 +470,8 @@ func httpProbe(conn net.Conn, host string) (time.Duration, error) {
 		return 0, fmt.Errorf("write request: %w", err)
 	}
 
-	// Set read deadline
-	if err := conn.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
-		return 0, err
-	}
+	// Try to set read deadline (ignore errors for connections that don't support it)
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	// Read first byte (TTFB - Time To First Byte)
 	reader := bufio.NewReader(conn)
@@ -620,34 +586,7 @@ func (p *poolOutbound) makeProbeByTagFunc(tag string) func(ctx context.Context) 
 // makeReleaseByTagFunc creates a release function that works before member initialization
 func (p *poolOutbound) makeReleaseByTagFunc(tag string) func() {
 	return func() {
-		// Ensure members are initialized
-		p.mu.Lock()
-		if len(p.members) == 0 {
-			if err := p.initializeMembersLocked(); err != nil {
-				p.mu.Unlock()
-				return
-			}
-		}
-
-		// Find the member by tag
-		var member *memberState
-		for _, m := range p.members {
-			if m.tag == tag {
-				member = m
-				break
-			}
-		}
-
-		if member != nil {
-			member.blacklisted = false
-			member.blacklistedUntil = time.Time{}
-			member.failures = 0
-		}
-		p.mu.Unlock()
-
-		if member != nil && member.entry != nil {
-			member.entry.ClearBlacklist()
-		}
+		releaseSharedMember(tag)
 	}
 }
 
@@ -676,15 +615,13 @@ func (c *trackedPacketConn) Close() error {
 }
 
 func (p *poolOutbound) incActive(member *memberState) {
-	member.active.Add(1)
-	if member.entry != nil {
-		member.entry.IncActive()
+	if member.shared != nil {
+		member.shared.incActive()
 	}
 }
 
 func (p *poolOutbound) decActive(member *memberState) {
-	member.active.Add(-1)
-	if member.entry != nil {
-		member.entry.DecActive()
+	if member.shared != nil {
+		member.shared.decActive()
 	}
 }

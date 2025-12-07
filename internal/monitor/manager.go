@@ -7,6 +7,7 @@ import (
 	"net"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -103,10 +104,27 @@ func NewManager(cfg Config) (*Manager, error) {
 		cancel: cancel,
 	}
 	if cfg.ProbeTarget != "" {
-		host, port, err := net.SplitHostPort(cfg.ProbeTarget)
+		target := cfg.ProbeTarget
+		// Strip URL scheme if present (e.g., "https://www.google.com:443" -> "www.google.com:443")
+		if strings.HasPrefix(target, "https://") {
+			target = strings.TrimPrefix(target, "https://")
+		} else if strings.HasPrefix(target, "http://") {
+			target = strings.TrimPrefix(target, "http://")
+		}
+		// Remove trailing path if present
+		if idx := strings.Index(target, "/"); idx != -1 {
+			target = target[:idx]
+		}
+		host, port, err := net.SplitHostPort(target)
 		if err != nil {
-			cancel()
-			return nil, err
+			// If no port specified, use default based on original scheme
+			if strings.HasPrefix(cfg.ProbeTarget, "https://") {
+				host = target
+				port = "443"
+			} else {
+				host = target
+				port = "80"
+			}
 		}
 		parsed := M.ParseSocksaddrHostPort(host, parsePort(port))
 		m.probeDst = parsed

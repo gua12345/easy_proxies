@@ -56,7 +56,8 @@ func Build(cfg *config.Config) (option.Options, error) {
 			URI:  node.URI,
 			Mode: cfg.Mode,
 		}
-		if cfg.Mode == "multi-port" {
+		// For multi-port and hybrid modes, use per-node port
+		if cfg.Mode == "multi-port" || cfg.Mode == "hybrid" {
 			meta.ListenAddress = cfg.MultiPort.Address
 			meta.Port = node.Port
 		} else {
@@ -87,13 +88,21 @@ func Build(cfg *config.Config) (option.Options, error) {
 	)
 	copy(outbounds, baseOutbounds)
 
-	switch cfg.Mode {
-	case "pool":
+	// Determine which components to enable based on mode
+	enablePoolInbound := cfg.Mode == "pool" || cfg.Mode == "hybrid"
+	enableMultiPort := cfg.Mode == "multi-port" || cfg.Mode == "hybrid"
+
+	if !enablePoolInbound && !enableMultiPort {
+		return option.Options{}, fmt.Errorf("unsupported mode %s", cfg.Mode)
+	}
+
+	// Build pool inbound (single entry point for all nodes)
+	if enablePoolInbound {
 		inbound, err := buildPoolInbound(cfg)
 		if err != nil {
 			return option.Options{}, err
 		}
-		inbounds = []option.Inbound{inbound}
+		inbounds = append(inbounds, inbound)
 		poolOptions := poolout.Options{
 			Mode:              cfg.Pool.Mode,
 			Members:           memberTags,
@@ -107,7 +116,10 @@ func Build(cfg *config.Config) (option.Options, error) {
 			Options: &poolOptions,
 		})
 		route.Final = poolout.Tag
-	case "multi-port":
+	}
+
+	// Build multi-port inbounds (one port per node)
+	if enableMultiPort {
 		addr, err := parseAddr(cfg.MultiPort.Address)
 		if err != nil {
 			return option.Options{}, fmt.Errorf("parse multi-port address: %w", err)
@@ -161,8 +173,6 @@ func Build(cfg *config.Config) (option.Options, error) {
 				},
 			})
 		}
-	default:
-		return option.Options{}, fmt.Errorf("unsupported mode %s", cfg.Mode)
 	}
 
 	opts := option.Options{
@@ -338,11 +348,19 @@ func buildTLSOptions(query url.Values) (*option.OutboundTLSOptions, error) {
 	if alpn := query.Get("alpn"); alpn != "" {
 		tlsOptions.ALPN = badoption.Listable[string](strings.Split(alpn, ","))
 	}
-	if fp := query.Get("fp"); fp != "" {
+	fp := query.Get("fp")
+	if fp != "" {
 		tlsOptions.UTLS = &option.OutboundUTLSOptions{Enabled: true, Fingerprint: fp}
 	}
 	if security == "reality" {
 		tlsOptions.Reality = &option.OutboundRealityOptions{Enabled: true, PublicKey: query.Get("pbk"), ShortID: query.Get("sid")}
+		// Reality requires uTLS; use default fingerprint if not specified
+		if tlsOptions.UTLS == nil {
+			if fp == "" {
+				fp = "chrome"
+			}
+			tlsOptions.UTLS = &option.OutboundUTLSOptions{Enabled: true, Fingerprint: fp}
+		}
 	}
 	return tlsOptions, nil
 }
@@ -764,25 +782,31 @@ func printProxyLinks(cfg *config.Config, metadata map[string]poolout.MemberMeta)
 	log.Println("📡 Proxy Links:")
 	log.Println("═══════════════════════════════════════════════════════════════")
 
-	switch cfg.Mode {
-	case "pool":
+	showPoolEntry := cfg.Mode == "pool" || cfg.Mode == "hybrid"
+	showMultiPort := cfg.Mode == "multi-port" || cfg.Mode == "hybrid"
+
+	if showPoolEntry {
 		// Pool mode: single entry point for all nodes
 		var auth string
 		if cfg.Listener.Username != "" {
 			auth = fmt.Sprintf("%s:%s@", cfg.Listener.Username, cfg.Listener.Password)
 		}
 		proxyURL := fmt.Sprintf("http://%s%s:%d", auth, cfg.Listener.Address, cfg.Listener.Port)
-		log.Printf("🌐 Pool Mode Entry Point:")
+		log.Printf("🌐 Pool Entry Point:")
 		log.Printf("   %s", proxyURL)
 		log.Println("")
 		log.Printf("   Nodes in pool (%d):", len(metadata))
 		for _, meta := range metadata {
 			log.Printf("   • %s", meta.Name)
 		}
+		if showMultiPort {
+			log.Println("")
+		}
+	}
 
-	case "multi-port":
+	if showMultiPort {
 		// Multi-port mode: each node has its own port
-		log.Printf("🔌 Multi-Port Mode (%d nodes):", len(cfg.Nodes))
+		log.Printf("🔌 Multi-Port Entry Points (%d nodes):", len(cfg.Nodes))
 		log.Println("")
 		for _, node := range cfg.Nodes {
 			var auth string

@@ -747,6 +747,72 @@
       flex: 1;
     }
 
+    /* Probe Progress */
+    .probe-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-elevated);
+      backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      z-index: 1500;
+      display: none;
+      animation: slideDown 0.3s ease;
+    }
+
+    .probe-progress.show { display: block; }
+
+    @keyframes slideDown {
+      from { transform: translateY(-100%); }
+      to { transform: translateY(0); }
+    }
+
+    .probe-progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .probe-progress-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .probe-progress-stats {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .probe-progress-bar {
+      height: 6px;
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .probe-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--success));
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .probe-progress-detail {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      gap: 16px;
+    }
+
+    .probe-progress-detail .success { color: var(--success); }
+    .probe-progress-detail .failed { color: var(--error); }
+
     /* Responsive */
     @media (max-width: 768px) {
       .app { padding: 24px 16px; }
@@ -790,6 +856,9 @@
           <path d="M13.65 2.35A7.958 7.958 0 0 0 8 0C3.58 0 0 3.58 0 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35z" fill="currentColor"/>
         </svg>
         刷新数据
+      </button>
+      <button class="btn btn-primary" id="probeAllBtn" onclick="probeAllNodes()">
+        ⚡ 探测全部
       </button>
       <button class="btn btn-secondary" onclick="toggleAutoRefresh()">
         <span id="autoRefreshText">关闭自动刷新</span>
@@ -889,6 +958,22 @@
 
   <div id="toast" class="toast">
     <span class="toast-message" id="toastMessage"></span>
+  </div>
+
+  <!-- 批量探测进度条 -->
+  <div id="probeProgress" class="probe-progress">
+    <div class="probe-progress-header">
+      <span class="probe-progress-title">⚡ 正在探测所有节点...</span>
+      <span class="probe-progress-stats" id="probeProgressStats">0 / 0</span>
+    </div>
+    <div class="probe-progress-bar">
+      <div class="probe-progress-fill" id="probeProgressFill"></div>
+    </div>
+    <div class="probe-progress-detail">
+      <span>成功: <span class="success" id="probeSuccessCount">0</span></span>
+      <span>失败: <span class="failed" id="probeFailedCount">0</span></span>
+      <span id="probeCurrentNode">准备中...</span>
+    </div>
   </div>
 
   <!-- 节点编辑弹窗 -->
@@ -1195,6 +1280,103 @@
         setTimeout(refresh, 500);
       } catch (err) {
         showToast('探测失败: ' + err.message, 'error');
+      }
+    }
+
+    // 批量探测所有节点
+    let isProbing = false;
+    async function probeAllNodes() {
+      if (isProbing) {
+        showToast('探测正在进行中...', 'error');
+        return;
+      }
+
+      isProbing = true;
+      const btn = document.getElementById('probeAllBtn');
+      btn.disabled = true;
+      btn.textContent = '探测中...';
+
+      // 显示进度条
+      const progressEl = document.getElementById('probeProgress');
+      const progressFill = document.getElementById('probeProgressFill');
+      const progressStats = document.getElementById('probeProgressStats');
+      const successCount = document.getElementById('probeSuccessCount');
+      const failedCount = document.getElementById('probeFailedCount');
+      const currentNode = document.getElementById('probeCurrentNode');
+
+      progressEl.classList.add('show');
+      progressFill.style.width = '0%';
+      progressStats.textContent = '0 / 0';
+      successCount.textContent = '0';
+      failedCount.textContent = '0';
+      currentNode.textContent = '准备中...';
+
+      try {
+        const response = await fetch('/api/nodes/probe-all', { method: 'POST' });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                handleProbeEvent(data);
+              } catch (e) {
+                console.error('Parse error:', e);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        showToast('批量探测失败: ' + err.message, 'error');
+      } finally {
+        isProbing = false;
+        btn.disabled = false;
+        btn.textContent = '⚡ 探测全部';
+        setTimeout(() => {
+          progressEl.classList.remove('show');
+          refresh();
+        }, 2000);
+      }
+    }
+
+    function handleProbeEvent(data) {
+      const progressFill = document.getElementById('probeProgressFill');
+      const progressStats = document.getElementById('probeProgressStats');
+      const successCountEl = document.getElementById('probeSuccessCount');
+      const failedCountEl = document.getElementById('probeFailedCount');
+      const currentNode = document.getElementById('probeCurrentNode');
+
+      switch (data.type) {
+        case 'start':
+          progressStats.textContent = `0 / ${data.total}`;
+          currentNode.textContent = '开始探测...';
+          break;
+        case 'progress':
+          progressFill.style.width = `${data.progress}%`;
+          progressStats.textContent = `${data.current} / ${data.total}`;
+          if (data.error) {
+            failedCountEl.textContent = parseInt(failedCountEl.textContent) + 1;
+            currentNode.textContent = `❌ ${data.name}: ${data.error}`;
+          } else {
+            successCountEl.textContent = parseInt(successCountEl.textContent) + 1;
+            currentNode.textContent = `✅ ${data.name}: ${data.latency}ms`;
+          }
+          break;
+        case 'complete':
+          progressFill.style.width = '100%';
+          currentNode.textContent = `完成！成功 ${data.success}，失败 ${data.failed}`;
+          showToast(`探测完成！成功 ${data.success} 个，失败 ${data.failed} 个`, 'success');
+          break;
       }
     }
 

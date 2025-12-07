@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -105,13 +107,28 @@ func (m *Manager) Start(ctx context.Context) error {
 	cfg := m.cfg
 	m.mu.Unlock()
 
-	instance, err := m.createBox(ctx, cfg)
-	if err != nil {
-		return err
-	}
-	if err := instance.Start(); err != nil {
-		_ = instance.Close()
-		return fmt.Errorf("start sing-box: %w", err)
+	// Try to start, with automatic port conflict resolution
+	var instance *box.Box
+	maxRetries := 10
+	for retry := 0; retry < maxRetries; retry++ {
+		var err error
+		instance, err = m.createBox(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		if err = instance.Start(); err != nil {
+			_ = instance.Close()
+			// Check if it's a port conflict error
+			if conflictPort := extractPortFromBindError(err); conflictPort > 0 {
+				m.logger.Warnf("port %d is in use, reassigning and retrying...", conflictPort)
+				if reassigned := reassignConflictingPort(cfg, conflictPort); reassigned {
+					pool.ResetSharedStateStore() // Reset shared state for rebuild
+					continue
+				}
+			}
+			return fmt.Errorf("start sing-box: %w", err)
+		}
+		break // Success
 	}
 
 	m.mu.Lock()
@@ -169,18 +186,33 @@ func (m *Manager) Reload(newCfg *config.Config) error {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	// Create and start new box instance
-	instance, err := m.createBox(ctx, newCfg)
-	if err != nil {
-		// Rollback: try to restart old config
-		m.rollbackToOldConfig(ctx, oldCfg)
-		return fmt.Errorf("create new box: %w", err)
-	}
-	if err := instance.Start(); err != nil {
-		_ = instance.Close()
-		// Rollback: try to restart old config
-		m.rollbackToOldConfig(ctx, oldCfg)
-		return fmt.Errorf("start new box: %w", err)
+	// Reset shared state store to ensure clean state for new config
+	pool.ResetSharedStateStore()
+
+	// Create and start new box instance with automatic port conflict resolution
+	var instance *box.Box
+	maxRetries := 10
+	for retry := 0; retry < maxRetries; retry++ {
+		var err error
+		instance, err = m.createBox(ctx, newCfg)
+		if err != nil {
+			m.rollbackToOldConfig(ctx, oldCfg)
+			return fmt.Errorf("create new box: %w", err)
+		}
+		if err = instance.Start(); err != nil {
+			_ = instance.Close()
+			// Check if it's a port conflict error
+			if conflictPort := extractPortFromBindError(err); conflictPort > 0 {
+				m.logger.Warnf("port %d is in use, reassigning and retrying...", conflictPort)
+				if reassigned := reassignConflictingPort(newCfg, conflictPort); reassigned {
+					pool.ResetSharedStateStore()
+					continue
+				}
+			}
+			m.rollbackToOldConfig(ctx, oldCfg)
+			return fmt.Errorf("start new box: %w", err)
+		}
+		break // Success
 	}
 
 	m.applyConfigSettings(newCfg)
@@ -587,6 +619,72 @@ func (m *Manager) TriggerReload(ctx context.Context) error {
 }
 
 // --- Helper functions ---
+
+// portBindErrorRegex matches "listen tcp4 0.0.0.0:24282: bind: address already in use"
+var portBindErrorRegex = regexp.MustCompile(`listen tcp[46]? [^:]+:(\d+): bind: address already in use`)
+
+// extractPortFromBindError extracts the port number from a bind error message.
+func extractPortFromBindError(err error) uint16 {
+	if err == nil {
+		return 0
+	}
+	matches := portBindErrorRegex.FindStringSubmatch(err.Error())
+	if len(matches) < 2 {
+		return 0
+	}
+	var port int
+	fmt.Sscanf(matches[1], "%d", &port)
+	if port > 0 && port <= 65535 {
+		return uint16(port)
+	}
+	return 0
+}
+
+// isPortAvailable checks if a port is available for binding.
+func isPortAvailable(address string, port uint16) bool {
+	addr := fmt.Sprintf("%s:%d", address, port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return false
+	}
+	_ = ln.Close()
+	return true
+}
+
+// reassignConflictingPort finds the node using the conflicting port and assigns a new port.
+func reassignConflictingPort(cfg *config.Config, conflictPort uint16) bool {
+	// Build set of used ports
+	usedPorts := make(map[uint16]bool)
+	if cfg.Mode == "hybrid" {
+		usedPorts[cfg.Listener.Port] = true
+	}
+	for _, node := range cfg.Nodes {
+		usedPorts[node.Port] = true
+	}
+
+	// Find and reassign the conflicting node
+	for idx := range cfg.Nodes {
+		if cfg.Nodes[idx].Port == conflictPort {
+			// Find next available port
+			newPort := conflictPort + 1
+			address := cfg.MultiPort.Address
+			if address == "" {
+				address = "0.0.0.0"
+			}
+			for usedPorts[newPort] || !isPortAvailable(address, newPort) {
+				newPort++
+				if newPort > 65535 {
+					log.Printf("❌ No available port found for node %q", cfg.Nodes[idx].Name)
+					return false
+				}
+			}
+			log.Printf("⚠️  Port %d in use, reassigning node %q to port %d", conflictPort, cfg.Nodes[idx].Name, newPort)
+			cfg.Nodes[idx].Port = newPort
+			return true
+		}
+	}
+	return false
+}
 
 func cloneNodes(nodes []config.NodeConfig) []config.NodeConfig {
 	if len(nodes) == 0 {

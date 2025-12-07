@@ -12,6 +12,7 @@ A proxy node pool management tool based on [sing-box](https://github.com/SagerNe
 - **Subscription Auto-Refresh**: Automatic periodic refresh with WebUI manual trigger (⚠️ causes connection interruption)
 - **Pool Mode**: Automatic failover and load balancing
 - **Multi-Port Mode**: Each node listens on independent port
+- **Hybrid Mode**: Pool + Multi-Port simultaneously with shared node state
 - **Web Dashboard**: Real-time node status, latency probing, one-click export
 - **Password Protection**: WebUI authentication support
 - **Auto Health Check**: Initial check on startup, periodic checks every 5 minutes
@@ -57,7 +58,7 @@ go build -tags "with_utls with_quic with_grpc" -o easy-proxies ./cmd/easy_proxie
 ### Basic Config
 
 ```yaml
-mode: pool                    # Mode: pool or multi-port
+mode: pool                    # Mode: pool, multi-port, or hybrid
 log_level: info               # Log level: debug, info, warn, error
 external_ip: ""               # External IP for export (recommended for Docker)
 
@@ -163,6 +164,65 @@ nodes_file: nodes.txt
 **Use Case:** Specific node selection, performance testing
 
 **Usage:** Each node has independent proxy address
+
+#### Hybrid Mode
+
+Combines Pool and Multi-Port modes, sharing node state between them:
+
+```yaml
+mode: hybrid
+
+listener:
+  address: 0.0.0.0
+  port: 2323           # Pool entry point
+  username: user
+  password: pass
+
+multi_port:
+  address: 0.0.0.0
+  base_port: 24000     # Multi-port starting port
+  username: mpuser
+  password: mppass
+
+pool:
+  mode: balance        # sequential, random, or balance
+  failure_threshold: 3
+  blacklist_duration: 24h
+```
+
+**Startup Output:**
+
+```
+📡 Proxy Links:
+═══════════════════════════════════════════════════════════════
+🌐 Pool Entry Point:
+   http://user:pass@0.0.0.0:2323
+
+   Nodes in pool (3):
+   • Taiwan Node
+   • Hong Kong Node
+   • US Node
+
+🔌 Multi-Port Entry Points (3 nodes):
+
+   [24000] Taiwan Node
+       http://mpuser:mppass@0.0.0.0:24000
+   [24001] Hong Kong Node
+       http://mpuser:mppass@0.0.0.0:24001
+   [24002] US Node
+       http://mpuser:mppass@0.0.0.0:24002
+═══════════════════════════════════════════════════════════════
+```
+
+**Key Features:**
+
+- **Shared State**: Node blacklist status syncs between Pool and Multi-Port
+  - If a node fails in Pool mode, it's also marked unavailable in Multi-Port
+  - Health checks update both modes simultaneously
+- **Auto Port Reassignment**: If a port is occupied, automatically assigns next available port
+- **Flexible Access**: Use Pool for load balancing, Multi-Port for specific node access
+
+**Use Case:** Need both automatic failover AND direct node access
 
 ### Node Configuration
 
@@ -378,9 +438,9 @@ subscription_refresh:
 
 | Port | Purpose |
 |------|---------|
-| 2323 | Unified proxy entry (Pool mode) |
+| 2323 | Unified proxy entry (Pool/Hybrid mode) |
 | 9090 | Web dashboard |
-| 24000+ | Multi-port mode, per-node ports |
+| 24000+ | Per-node ports (Multi-Port/Hybrid mode) |
 
 ## Docker Deployment
 
@@ -401,7 +461,7 @@ services:
       - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro
 ```
 
-> **Advantage**: Container uses host network directly, all ports exposed automatically.
+> **Advantage**: Container uses host network directly, all ports exposed automatically. Auto port reassignment works seamlessly.
 
 **Method 2: Port Mapping Mode**
 
@@ -415,15 +475,15 @@ services:
     container_name: easy-proxies
     restart: unless-stopped
     ports:
-      - "2323:2323"       # Pool mode entry
+      - "2323:2323"       # Pool/Hybrid mode entry
       - "9091:9091"       # Web dashboard
-      - "24000-24100:24000-24100"  # Multi-port mode
+      - "24000-24200:24000-24200"  # Multi-Port/Hybrid mode
     volumes:
       - ./config.yaml:/etc/easy-proxies/config.yaml:ro
       - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro
 ```
 
-> **Note**: Multi-port mode requires mapping the port range. For N nodes, open ports `24000` to `24000+N-1`.
+> **Note**: Multi-Port and Hybrid modes require mapping the port range. Map enough ports for your nodes plus some buffer for auto-reassignment.
 
 ## Building
 
