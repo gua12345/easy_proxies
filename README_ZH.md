@@ -458,9 +458,11 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./config.yaml:/etc/easy-proxies/config.yaml:ro
-      - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro
+      - ./config.yaml:/etc/easy-proxies/config.yaml
+      - ./nodes.txt:/etc/easy-proxies/nodes.txt
 ```
+
+> **注意**: 配置文件需要可写权限以支持 WebUI 设置保存。如遇权限问题，请执行 `chmod 666 config.yaml nodes.txt`
 
 > **优点**: 容器直接使用主机网络，所有端口自动对外开放。端口自动重分配功能可完美工作。
 
@@ -480,8 +482,8 @@ services:
       - "9091:9091"       # Web 监控面板
       - "24000-24200:24000-24200"  # 多端口/混合模式
     volumes:
-      - ./config.yaml:/etc/easy-proxies/config.yaml:ro
-      - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro
+      - ./config.yaml:/etc/easy-proxies/config.yaml
+      - ./nodes.txt:/etc/easy-proxies/nodes.txt
 ```
 
 > **注意**: 多端口和混合模式需要映射足够的端口范围，建议预留一些缓冲端口用于自动重分配。

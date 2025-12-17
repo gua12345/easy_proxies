@@ -457,9 +457,11 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./config.yaml:/etc/easy-proxies/config.yaml:ro
-      - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro
+      - ./config.yaml:/etc/easy-proxies/config.yaml
+      - ./nodes.txt:/etc/easy-proxies/nodes.txt
 ```
+
+> **Note**: Config files need write permission for WebUI settings. Run `chmod 666 config.yaml nodes.txt` if you encounter permission errors.
 
 > **Advantage**: Container uses host network directly, all ports exposed automatically. Auto port reassignment works seamlessly.
 
@@ -479,8 +481,8 @@ services:
       - "9091:9091"       # Web dashboard
       - "24000-24200:24000-24200"  # Multi-Port/Hybrid mode
     volumes:
-      - ./config.yaml:/etc/easy-proxies/config.yaml:ro
-      - ./nodes.txt:/etc/easy-proxies/nodes.txt:ro
+      - ./config.yaml:/etc/easy-proxies/config.yaml
+      - ./nodes.txt:/etc/easy-proxies/nodes.txt
 ```
 
 > **Note**: Multi-Port and Hybrid modes require mapping the port range. Map enough ports for your nodes plus some buffer for auto-reassignment.
