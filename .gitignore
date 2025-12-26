@@ -34,3 +34,7 @@ coverage.html
 
 # Qodo
 .qodo/
+CLAUDE.md
+/.claude
+PLAN.md
+start.bat

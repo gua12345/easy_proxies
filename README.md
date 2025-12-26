@@ -4,36 +4,36 @@ English | [简体中文](README_ZH.md)
 
 A proxy node pool management tool based on [sing-box](https://github.com/SagerNet/sing-box), supporting multiple protocols, automatic failover, and load balancing.
 
+## Documentation
+
+- [API Documentation](docs/api.md) - Complete REST API reference
+- [中文 API 文档](docs/api_zh.md) - API 文档（中文）
+
 ## Features
 
-- **Multi-Protocol Support**: VMess, VLESS, Hysteria2, Shadowsocks, Trojan
+- **Multi-Protocol**: VMess, VLESS, Hysteria2, Shadowsocks, Trojan
 - **Multiple Transports**: TCP, WebSocket, HTTP/2, gRPC, HTTPUpgrade
-- **Subscription Support**: Auto-fetch nodes from subscription links (Base64, Clash YAML, etc.)
-- **Subscription Auto-Refresh**: Automatic periodic refresh with WebUI manual trigger (⚠️ causes connection interruption)
+- **Subscription Support**: Auto-fetch from Base64, Clash YAML, etc.
+- **Auto-Refresh**: Periodic subscription refresh with manual trigger (⚠️ interrupts connections)
 - **Pool Mode**: Automatic failover and load balancing
-- **Multi-Port Mode**: Each node listens on independent port
-- **Hybrid Mode**: Pool + Multi-Port simultaneously with shared node state
-- **Web Dashboard**: Real-time node status, latency probing, one-click export
-- **WebUI Settings**: Modify external_ip and probe_target without editing config files
-- **Password Protection**: WebUI authentication support
-- **Auto Health Check**: Initial check on startup, periodic checks every 5 minutes
-- **Smart Node Filtering**: Auto-hide unavailable nodes, sort by latency
-- **Port Preservation**: Existing nodes keep their ports when adding/updating nodes
-- **Flexible Configuration**: Config file, node file, subscription links
-- **Multi-Architecture**: Docker images for both AMD64 and ARM64
+- **Multi-Port Mode**: Each node on independent port
+- **Hybrid Mode**: Pool + Multi-Port with shared state
+- **Web Dashboard**: Real-time monitoring, latency probes, one-click export
+- **Health Check**: Auto-detect node availability, periodic checks every 5 min
+- **Smart Filtering**: Auto-hide unavailable nodes, sort by latency
+- **Node Management**: CRUD operations via Web UI or API
+- **Port Preservation**: Keep assigned ports when reloading
 
 ## Quick Start
 
 ### 1. Configuration
-
-Copy example config files:
 
 ```bash
 cp config.example.yaml config.yaml
 cp nodes.example nodes.txt
 ```
 
-Edit `config.yaml` to set listen address and credentials, edit `nodes.txt` to add proxy nodes.
+Edit `config.yaml` for settings, `nodes.txt` for proxy nodes.
 
 ### 2. Run
 
@@ -43,7 +43,7 @@ Edit `config.yaml` to set listen address and credentials, edit `nodes.txt` to ad
 ./start.sh
 ```
 
-Or manually:
+Or:
 
 ```bash
 docker compose up -d
@@ -61,177 +61,63 @@ go build -tags "with_utls with_quic with_grpc" -o easy-proxies ./cmd/easy_proxie
 ### Basic Config
 
 ```yaml
-mode: pool                    # Mode: pool, multi-port, or hybrid
-log_level: info               # Log level: debug, info, warn, error
-external_ip: ""               # External IP for export (recommended for Docker)
+mode: pool                    # pool, multi-port, or hybrid
+log_level: info
 
-# Subscription URLs (optional, multiple supported)
+# Subscriptions (optional)
 subscriptions:
   - "https://example.com/subscribe"
 
 # Management Interface
 management:
   enabled: true
-  listen: 0.0.0.0:9090        # Web dashboard address
-  probe_target: www.apple.com:80  # Latency probe target
-  password: ""                # WebUI password (optional)
+  listen: 0.0.0.0:9090        # Web dashboard
+  probe_target: www.apple.com:80
+  password: ""                # Optional password
 
-# Unified Entry Listener
+# Entry Points
 listener:
   address: 0.0.0.0
   port: 2323
-  username: username
-  password: password
+  username: user
+  password: pass
 
-# Pool Settings
-pool:
-  mode: sequential            # sequential or random
-  failure_threshold: 3        # Failures before blacklist
-  blacklist_duration: 24h     # Blacklist duration
-
-# Multi-Port Mode
 multi_port:
   address: 0.0.0.0
-  base_port: 24000            # Starting port, auto-increment
+  base_port: 24000
   username: mpuser
   password: mppass
+
+pool:
+  mode: sequential            # sequential, random, or balance
+  failure_threshold: 3
+  blacklist_duration: 24h
 ```
 
 ### Operating Modes
 
 #### Pool Mode
 
-All nodes share a single entry point, program auto-selects available nodes:
+Single entry point for all nodes with auto-selection.
 
-```yaml
-mode: pool
-
-listener:
-  address: 0.0.0.0
-  port: 2323
-  username: user
-  password: pass
-
-pool:
-  mode: sequential  # sequential or random
-  failure_threshold: 3
-  blacklist_duration: 24h
-```
-
-**Use Case:** Automatic failover, load balancing
-
-**Usage:** Set proxy to `http://user:pass@localhost:2323`
+**Use:** `http://user:pass@localhost:2323`
 
 #### Multi-Port Mode
 
-Each node listens on its own port for precise control:
+Each node on its own port for precise control.
 
-**Config Format:** Two syntaxes supported
-
-```yaml
-mode: multi-port  # Recommended: hyphen format
-# or
-mode: multi_port  # Compatible: underscore format
-```
-
-**Full Example:**
-
-```yaml
-mode: multi-port
-
-multi_port:
-  address: 0.0.0.0
-  base_port: 24000  # Ports auto-increment from here
-  username: user
-  password: pass
-
-nodes_file: nodes.txt
-```
-
-**Startup Output:**
-
-```
-📡 Proxy Links:
-═══════════════════════════════════════════════════════════════
-🔌 Multi-Port Mode (3 nodes):
-
-   [24000] Taiwan Node
-       http://user:pass@0.0.0.0:24000
-   [24001] Hong Kong Node
-       http://user:pass@0.0.0.0:24001
-   [24002] US Node
-       http://user:pass@0.0.0.0:24002
-═══════════════════════════════════════════════════════════════
-```
-
-**Use Case:** Specific node selection, performance testing
-
-**Usage:** Each node has independent proxy address
+Ports auto-increment from `base_port` (default 24000).
 
 #### Hybrid Mode
 
-Combines Pool and Multi-Port modes, sharing node state between them:
+Both Pool and Multi-Port enabled, sharing node state.
 
-```yaml
-mode: hybrid
-
-listener:
-  address: 0.0.0.0
-  port: 2323           # Pool entry point
-  username: user
-  password: pass
-
-multi_port:
-  address: 0.0.0.0
-  base_port: 24000     # Multi-port starting port
-  username: mpuser
-  password: mppass
-
-pool:
-  mode: balance        # sequential, random, or balance
-  failure_threshold: 3
-  blacklist_duration: 24h
-```
-
-**Startup Output:**
-
-```
-📡 Proxy Links:
-═══════════════════════════════════════════════════════════════
-🌐 Pool Entry Point:
-   http://user:pass@0.0.0.0:2323
-
-   Nodes in pool (3):
-   • Taiwan Node
-   • Hong Kong Node
-   • US Node
-
-🔌 Multi-Port Entry Points (3 nodes):
-
-   [24000] Taiwan Node
-       http://mpuser:mppass@0.0.0.0:24000
-   [24001] Hong Kong Node
-       http://mpuser:mppass@0.0.0.0:24001
-   [24002] US Node
-       http://mpuser:mppass@0.0.0.0:24002
-═══════════════════════════════════════════════════════════════
-```
-
-**Key Features:**
-
-- **Shared State**: Node blacklist status syncs between Pool and Multi-Port
-  - If a node fails in Pool mode, it's also marked unavailable in Multi-Port
-  - Health checks update both modes simultaneously
-- **Auto Port Reassignment**: If a port is occupied, automatically assigns next available port
-- **Flexible Access**: Use Pool for load balancing, Multi-Port for specific node access
-
-**Use Case:** Need both automatic failover AND direct node access
+- Pool entry: `http://user:pass@0.0.0.0:2323`
+- Multi-port entries: `http://mpuser:mppass@0.0.0.0:24000+`
 
 ### Node Configuration
 
-**Method 1: Subscription Links (Recommended)**
-
-Auto-fetch nodes from subscription URLs:
+**Method 1: Subscription Links**
 
 ```yaml
 subscriptions:
@@ -239,40 +125,29 @@ subscriptions:
   - "https://example.com/subscribe/clash"
 ```
 
-Supported formats:
-- **Base64 Encoded**: V2Ray standard subscription
-- **Clash YAML**: Clash config format
-- **Plain Text**: One URI per line
-
 **Method 2: Node File**
-
-Specify in `config.yaml`:
 
 ```yaml
 nodes_file: nodes.txt
 ```
 
-`nodes.txt` - one URI per line:
+`nodes.txt` format (one per line):
 
 ```
 vless://uuid@server:443?security=reality&sni=example.com#NodeName
 hysteria2://password@server:443?sni=example.com#HY2Node
 ss://base64@server:8388#SSNode
-trojan://password@server:443?sni=example.com#TrojanNode
-vmess://base64...#VMessNode
 ```
 
-**Method 3: Direct in Config**
+**Method 3: Inline Nodes**
 
 ```yaml
 nodes:
   - uri: "vless://uuid@server:443#Node1"
   - name: custom-name
     uri: "ss://base64@server:8388"
-    port: 24001  # Optional, manual port
+    port: 24001
 ```
-
-> **Tip**: Multiple methods can be combined, nodes are merged automatically.
 
 ## Supported Protocols
 
@@ -284,190 +159,159 @@ nodes:
 | Shadowsocks | `ss://` | Multiple ciphers |
 | Trojan | `trojan://` | TLS, multiple transports |
 
-### VMess Parameters
+### Protocol Details
 
-VMess supports two URI formats:
+**VMess**
 
-**Format 1: Base64 JSON (Standard)**
-```
-vmess://base64({"v":"2","ps":"Name","add":"server","port":443,"id":"uuid","aid":0,"scy":"auto","net":"ws","type":"","host":"example.com","path":"/path","tls":"tls","sni":"example.com"})
-```
-
-**Format 2: URL Format**
 ```
 vmess://uuid@server:port?encryption=auto&security=tls&sni=example.com&type=ws&host=example.com&path=/path#Name
 ```
 
+Parameters:
 - `net/type`: tcp, ws, h2, grpc
 - `tls/security`: tls or empty
-- `scy/encryption`: auto, aes-128-gcm, chacha20-poly1305, etc.
+- `scy/encryption`: auto, aes-128-gcm, chacha20-poly1305
 
-### VLESS Parameters
+**VLESS**
 
 ```
 vless://uuid@server:port?encryption=none&security=reality&sni=example.com&fp=chrome&pbk=xxx&sid=xxx&type=tcp&flow=xtls-rprx-vision#Name
 ```
 
+Parameters:
 - `security`: none, tls, reality
 - `type`: tcp, ws, http, grpc, httpupgrade
 - `flow`: xtls-rprx-vision (TCP only)
-- `fp`: fingerprint (chrome, firefox, safari, etc.)
+- `fp`: fingerprint (chrome, firefox, safari)
 
-### Hysteria2 Parameters
+**Hysteria2**
 
 ```
-hysteria2://password@server:port?sni=example.com&insecure=0&obfs=salamander&obfs-password=xxx#Name
+hysteria2://password@server:port?sni=example.com&obfs=salamander&obfs-password=xxx#Name
 ```
 
+Parameters:
 - `upMbps` / `downMbps`: Bandwidth limits
 - `obfs`: Obfuscation type
-- `obfs-password`: Obfuscation password
 
 ## Web Dashboard
 
-Access `http://localhost:9090` to view:
+Access `http://localhost:9090` for:
 
-- Node status (Healthy/Warning/Error/Blacklisted)
-- Real-time latency
-- Active connections
-- Failure count
+- Real-time node status (Healthy/Warning/Error/Blacklisted)
+- Latency and connection stats
 - Manual latency probing
 - Release blacklisted nodes
-- **One-click Export**: Export all available nodes as proxy URIs (`http://user:pass@host:port`)
-- **Settings**: Click the gear icon to modify `external_ip` and `probe_target` (changes saved immediately)
+- **One-click export** - Export available nodes as proxy URIs
+- **Settings** - Modify `external_ip` and `probe_target`
+- **Node Management** - Add, edit, delete nodes via UI
+- **Subscription status** - View and trigger refresh
 
-### WebUI Settings
+### Authentication
 
-Click the ⚙️ gear icon in the header to access settings:
-
-| Setting | Description |
-|---------|-------------|
-| External IP | IP address used in exported proxy URIs (replaces `0.0.0.0`) |
-| Probe Target | Health check target address (format: `host:port`) |
-
-Changes are saved to `config.yaml` immediately and take effect without restart.
-
-### Node Management
-
-The Web UI provides a **Node Management** tab for CRUD operations on proxy nodes:
-
-- **Add Node**: Add new proxy nodes via URI (name auto-extracted from URI fragment)
-- **Edit Node**: Modify existing node configuration
-- **Delete Node**: Remove nodes from configuration
-- **Reload Config**: Apply changes by restarting sing-box core (⚠️ interrupts connections)
-- **Port Preservation**: Existing nodes keep their assigned ports after reload
-
-In Multi-Port mode, ports are automatically allocated from `base_port`.
-
-**API Endpoints:**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/nodes/config` | List all configured nodes |
-| POST | `/api/nodes/config` | Add a new node |
-| PUT | `/api/nodes/config/:name` | Update node by name |
-| DELETE | `/api/nodes/config/:name` | Delete node by name |
-| POST | `/api/reload` | Reload configuration |
-| GET | `/api/settings` | Get current settings |
-| PUT | `/api/settings` | Update settings (external_ip, probe_target) |
-
-**Request/Response Example:**
-
-```bash
-# Add node
-curl -X POST http://localhost:9090/api/nodes/config \
-  -H "Content-Type: application/json" \
-  -d '{"uri": "vless://uuid@server:443#NodeName"}'
-
-# Delete node
-curl -X DELETE http://localhost:9090/api/nodes/config/NodeName
-
-# Reload config
-curl -X POST http://localhost:9090/api/reload
-```
-
-### Health Check Mechanism
-
-Auto health check on startup, then periodic checks:
-
-- **Initial Check**: Test all nodes immediately after startup
-- **Periodic Check**: Every 5 minutes
-- **Smart Filtering**: Hide unavailable nodes from WebUI and export
-- **Probe Target**: Configure via `management.probe_target` (default `www.apple.com:80`)
+Set password in `config.yaml`:
 
 ```yaml
 management:
-  enabled: true
-  listen: 0.0.0.0:9090
-  probe_target: www.apple.com:80  # Health check target
-```
-
-### Password Protection
-
-Protect node information with WebUI password:
-
-```yaml
-management:
-  enabled: true
-  listen: 0.0.0.0:9090
   password: "your_secure_password"
 ```
 
-- Empty or unset `password` means no authentication required
-- Login prompt appears on first access when password is set
-- Session persists for 7 days after login
+Login via Web UI or use Bearer token in API requests.
 
-### Subscription Auto-Refresh
+### Settings Management
 
-Automatic periodic subscription refresh:
+Click ⚙️ gear icon to modify:
+
+| Setting | Description |
+|---------|-------------|
+| External IP | IP for exported proxy URIs (replaces `0.0.0.0`) |
+| Probe Target | Health check target (format: `host:port`) |
+
+Changes saved immediately to `config.yaml`.
+
+## API Usage
+
+Full API documentation: [docs/api.md](docs/api.md)
+
+### Quick Examples
+
+```bash
+# Get available nodes
+curl http://localhost:9090/api/nodes
+
+# Export proxy URIs
+curl http://localhost:9090/api/export
+
+# Login with password
+TOKEN=$(curl -s -X POST http://localhost:9090/api/auth \
+  -H "Content-Type: application/json" \
+  -d '{"password": "your_password"}' | jq -r '.token')
+
+# Add node
+curl -X POST http://localhost:9090/api/nodes/config \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"uri": "vless://uuid@server:443#New Node"}'
+
+# Reload config
+curl -X POST http://localhost:9090/api/reload \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/nodes` | List runtime nodes |
+| GET | `/api/export` | Export proxy URIs |
+| GET | `/api/nodes/config` | List configured nodes |
+| POST | `/api/nodes/config` | Add node |
+| PUT | `/api/nodes/config/:name` | Update node |
+| DELETE | `/api/nodes/config/:name` | Delete node |
+| POST | `/api/reload` | Reload config |
+| GET | `/api/settings` | Get settings |
+| PUT | `/api/settings` | Update settings |
+| GET | `/api/subscription/status` | Subscription status |
+| POST | `/api/subscription/refresh` | Refresh subscription |
+
+## Health Check
+
+- **Initial Check**: Tests all nodes on startup
+- **Periodic Check**: Every 5 minutes
+- **Smart Filtering**: Hides unavailable nodes from UI and export
+- **Configurable Target**: `management.probe_target` (default `www.apple.com:80`)
+
+## Subscription Auto-Refresh
 
 ```yaml
 subscription_refresh:
-  enabled: true                 # Enable auto-refresh
-  interval: 1h                  # Refresh interval (default 1 hour)
-  timeout: 30s                  # Fetch timeout
-  health_check_timeout: 60s     # New node health check timeout
-  drain_timeout: 30s            # Old instance drain timeout
-  min_available_nodes: 1        # Minimum available nodes required
+  enabled: true
+  interval: 1h
+  timeout: 30s
+  health_check_timeout: 60s
+  drain_timeout: 30s
+  min_available_nodes: 1
 ```
 
-> ⚠️ **Important: Subscription refresh causes connection interruption**
+> ⚠️ **Refresh restarts sing-box core and interrupts all connections**
 >
-> During subscription refresh, the program **restarts the sing-box core** to load new node configuration. This means:
->
-> - **All existing connections will be disconnected**
-> - Ongoing downloads, streaming, etc. will be interrupted
-> - Clients need to reconnect
->
-> **Recommendations:**
-> - Set longer refresh intervals (e.g., `1h` or more)
+> - Set longer intervals (e.g., `1h` or more)
 > - Avoid manual refresh during peak usage
-> - Disable if connection stability is critical (`enabled: false`)
-
-**WebUI and API Support:**
-
-- WebUI shows subscription status (node count, last refresh time, errors)
-- Manual refresh button available
-- API endpoints:
-  - `GET /api/subscription/status` - Get subscription status
-  - `POST /api/subscription/refresh` - Trigger manual refresh
+> - Disable if stability is critical (`enabled: false`)
 
 ## Ports
 
 | Port | Purpose |
 |------|---------|
-| 2323 | Unified proxy entry (Pool/Hybrid mode) |
+| 2323 | Pool/Hybrid entry |
 | 9090 | Web dashboard |
-| 24000+ | Per-node ports (Multi-Port/Hybrid mode) |
+| 24000+ | Multi-port/Hybrid nodes |
 
 ## Docker Deployment
 
-**Method 1: Host Network Mode (Recommended)**
-
-Use `network_mode: host` for direct host network access:
+### Host Network (Recommended)
 
 ```yaml
-# docker-compose.yml
 services:
   easy-proxies:
     image: ghcr.io/jasonwong1991/easy_proxies:latest
@@ -479,31 +323,24 @@ services:
       - ./nodes.txt:/etc/easy-proxies/nodes.txt
 ```
 
-> **Note**: Config files need write permission for WebUI settings. Run `chmod 666 config.yaml nodes.txt` if you encounter permission errors.
+**Note**: Config files need write permission: `chmod 666 config.yaml nodes.txt`
 
-> **Advantage**: Container uses host network directly, all ports exposed automatically. Auto port reassignment works seamlessly.
-
-**Method 2: Port Mapping Mode**
-
-Manually specify port mappings:
+### Port Mapping
 
 ```yaml
-# docker-compose.yml
 services:
   easy-proxies:
     image: ghcr.io/jasonwong1991/easy_proxies:latest
     container_name: easy-proxies
     restart: unless-stopped
     ports:
-      - "2323:2323"       # Pool/Hybrid mode entry
-      - "9091:9091"       # Web dashboard
-      - "24000-24200:24000-24200"  # Multi-Port/Hybrid mode
+      - "2323:2323"
+      - "9090:9090"
+      - "24000-24200:24000-24200"
     volumes:
       - ./config.yaml:/etc/easy-proxies/config.yaml
       - ./nodes.txt:/etc/easy-proxies/nodes.txt
 ```
-
-> **Note**: Multi-Port and Hybrid modes require mapping the port range. Map enough ports for your nodes plus some buffer for auto-reassignment.
 
 ## Building
 
@@ -511,13 +348,9 @@ services:
 # Basic build
 go build -o easy-proxies ./cmd/easy_proxies
 
-# Full feature build
+# Full features (recommended)
 go build -tags "with_utls with_quic with_grpc with_wireguard with_gvisor" -o easy-proxies ./cmd/easy_proxies
 ```
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=jasonwong1991/easy_proxies&type=Date)](https://star-history.com/#jasonwong1991/easy_proxies&Date)
 
 ## License
 

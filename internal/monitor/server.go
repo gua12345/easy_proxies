@@ -28,6 +28,7 @@ type NodeManager interface {
 	UpdateNode(ctx context.Context, name string, node config.NodeConfig) (config.NodeConfig, error)
 	DeleteNode(ctx context.Context, name string) error
 	TriggerReload(ctx context.Context) error
+	GetCurrentMode() string // 获取当前运行模式（pool/multi-port/hybrid）
 }
 
 // Sentinel errors for node operations.
@@ -91,6 +92,8 @@ func NewServer(cfg Config, mgr *Manager, logger *log.Logger) *Server {
 	mux.HandleFunc("/api/nodes/config/", s.withAuth(s.handleConfigNodeItem))
 	mux.HandleFunc("/api/nodes/probe-all", s.withAuth(s.handleProbeAll))
 	mux.HandleFunc("/api/nodes/", s.withAuth(s.handleNodeAction))
+	mux.HandleFunc("/api/nodes/get_available_node", s.withAuth(s.handleGetAvailableNode))
+	mux.HandleFunc("/api/nodes/get_available_nodes", s.withAuth(s.handleGetAvailableNodes))
 	mux.HandleFunc("/api/export", s.withAuth(s.handleExport))
 	mux.HandleFunc("/api/subscription/status", s.withAuth(s.handleSubscriptionStatus))
 	mux.HandleFunc("/api/subscription/refresh", s.withAuth(s.handleSubscriptionRefresh))

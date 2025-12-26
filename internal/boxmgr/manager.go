@@ -650,6 +650,16 @@ func (m *Manager) CurrentPortMap() map[string]uint16 {
 	return m.cfg.BuildPortMap()
 }
 
+// GetCurrentMode returns the current running mode (pool/multi-port/hybrid).
+func (m *Manager) GetCurrentMode() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.cfg == nil {
+		return ""
+	}
+	return m.cfg.Mode
+}
+
 // --- Helper functions ---
 
 // portBindErrorRegex matches "listen tcp4 0.0.0.0:24282: bind: address already in use"
