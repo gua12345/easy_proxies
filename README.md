@@ -18,6 +18,7 @@ A proxy node pool management tool based on [sing-box](https://github.com/SagerNe
 - **Pool Mode**: Automatic failover and load balancing
 - **Multi-Port Mode**: Each node on independent port
 - **Hybrid Mode**: Pool + Multi-Port with shared state
+- **Virtual Pools**: Filter nodes by regex, create multiple independent load-balanced entries
 - **Web Dashboard**: Real-time monitoring, latency probes, one-click export
 - **Health Check**: Auto-detect node availability, periodic checks every 5 min
 - **Smart Filtering**: Auto-hide unavailable nodes, sort by latency
@@ -114,6 +115,37 @@ Both Pool and Multi-Port enabled, sharing node state.
 
 - Pool entry: `http://user:pass@0.0.0.0:2323`
 - Multi-port entries: `http://mpuser:mppass@0.0.0.0:24000+`
+
+### Virtual Pools
+
+Virtual pools allow filtering nodes by regex to create multiple independent load-balanced entries. Useful for grouping nodes by region, type, etc.
+
+```yaml
+virtual_pools:
+  # US nodes pool
+  - name: "US_Pool"
+    regular: ".*US.*"             # Regex to match node names
+    address: 0.0.0.0
+    port: 3001
+    username: ususer              # Optional auth
+    password: uspass
+    strategy: sequential          # sequential/random/balance
+
+  # Low latency pool
+  - name: "Fast_Pool"
+    regular: ".*"                 # Match all nodes
+    address: 0.0.0.0
+    port: 3002
+    strategy: balance
+    max_latency_ms: 200           # Only select nodes with latency < 200ms
+```
+
+**Usage:** `http://ususer:uspass@localhost:3001`
+
+**Load Balancing Strategies:**
+- `sequential`: Round-robin (default)
+- `random`: Random selection
+- `balance`: Least connections first
 
 ### Node Configuration
 
@@ -273,6 +305,8 @@ curl -X POST http://localhost:9090/api/reload \
 | PUT | `/api/settings` | Update settings |
 | GET | `/api/subscription/status` | Subscription status |
 | POST | `/api/subscription/refresh` | Refresh subscription |
+| GET | `/api/virtual_pools/status` | Virtual pools status |
+| GET | `/api/virtual_pools/:name/nodes` | Virtual pool node list |
 
 ## Health Check
 
@@ -306,6 +340,7 @@ subscription_refresh:
 | 2323 | Pool/Hybrid entry |
 | 9090 | Web dashboard |
 | 24000+ | Multi-port/Hybrid nodes |
+| Custom | Virtual pool entries (configured in `virtual_pools`) |
 
 ## Docker Deployment
 
@@ -349,7 +384,7 @@ services:
 go build -o easy-proxies ./cmd/easy_proxies
 
 # Full features (recommended)
-go build -tags "with_utls with_quic with_grpc with_wireguard with_gvisor" -o easy-proxies ./cmd/easy_proxies
+go build -tags "with_utls with_quic with_grpc with_wireguard with_gvisor" -o easy-proxies.exe ./cmd/easy_proxies
 ```
 
 ## License

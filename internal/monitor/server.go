@@ -55,6 +55,29 @@ type SubscriptionStatus struct {
 	NodesModified bool      `json:"nodes_modified"` // True if nodes.txt was modified since last refresh
 }
 
+// VirtualPoolManager 虚拟池管理器接口
+type VirtualPoolManager interface {
+	Status() []VirtualPoolStatus
+	GetPool(name string) VirtualPoolInstance
+}
+
+// VirtualPoolStatus 虚拟池状态
+type VirtualPoolStatus struct {
+	Name         string `json:"name"`
+	Regular      string `json:"regular"`
+	Address      string `json:"address"`
+	Port         uint16 `json:"port"`
+	Strategy     string `json:"strategy"`
+	MaxLatencyMs int    `json:"max_latency_ms"`
+	NodeCount    int    `json:"node_count"`
+	Running      bool   `json:"running"`
+}
+
+// VirtualPoolInstance 虚拟池实例接口
+type VirtualPoolInstance interface {
+	GetMatchingNodes() []Snapshot
+}
+
 // Server exposes HTTP endpoints for monitoring.
 type Server struct {
 	cfg          Config
@@ -66,6 +89,7 @@ type Server struct {
 	sessionToken string // 简单的 session token，重启后失效
 	subRefresher SubscriptionRefresher
 	nodeMgr      NodeManager
+	vpMgr        VirtualPoolManager // 虚拟池管理器
 }
 
 // NewServer constructs a server; it can be nil when disabled.
@@ -97,6 +121,8 @@ func NewServer(cfg Config, mgr *Manager, logger *log.Logger) *Server {
 	mux.HandleFunc("/api/export", s.withAuth(s.handleExport))
 	mux.HandleFunc("/api/subscription/status", s.withAuth(s.handleSubscriptionStatus))
 	mux.HandleFunc("/api/subscription/refresh", s.withAuth(s.handleSubscriptionRefresh))
+	mux.HandleFunc("/api/virtual_pools/status", s.withAuth(s.handleVirtualPoolsStatus))
+	mux.HandleFunc("/api/virtual_pools/", s.withAuth(s.handleVirtualPoolNodes))
 	mux.HandleFunc("/api/reload", s.withAuth(s.handleReload))
 	s.srv = &http.Server{Addr: cfg.Listen, Handler: mux}
 	return s
@@ -113,6 +139,13 @@ func (s *Server) SetSubscriptionRefresher(sr SubscriptionRefresher) {
 func (s *Server) SetNodeManager(nm NodeManager) {
 	if s != nil {
 		s.nodeMgr = nm
+	}
+}
+
+// SetVirtualPoolManager sets the virtual pool manager for API endpoints.
+func (s *Server) SetVirtualPoolManager(vpm VirtualPoolManager) {
+	if s != nil {
+		s.vpMgr = vpm
 	}
 }
 
@@ -707,4 +740,68 @@ func (s *Server) respondNodeError(w http.ResponseWriter, err error) {
 	}
 	w.WriteHeader(status)
 	writeJSON(w, map[string]any{"error": err.Error()})
+}
+
+// handleVirtualPoolsStatus 获取所有虚拟池状态
+func (s *Server) handleVirtualPoolsStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.vpMgr == nil {
+		writeJSON(w, map[string]any{
+			"pools": []VirtualPoolStatus{},
+		})
+		return
+	}
+
+	statuses := s.vpMgr.Status()
+	writeJSON(w, map[string]any{
+		"pools": statuses,
+	})
+}
+
+// handleVirtualPoolNodes 获取指定虚拟池的节点列表
+// GET /api/virtual_pools/{pool_name}/nodes
+func (s *Server) handleVirtualPoolNodes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 解析路径: /api/virtual_pools/{pool_name}/nodes
+	path := strings.TrimPrefix(r.URL.Path, "/api/virtual_pools/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 || parts[1] != "nodes" {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]any{"error": "Invalid path, expected /api/virtual_pools/{pool_name}/nodes"})
+		return
+	}
+
+	poolName, err := url.PathUnescape(parts[0])
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]any{"error": "Invalid pool name encoding"})
+		return
+	}
+
+	if s.vpMgr == nil {
+		w.WriteHeader(http.StatusNotFound)
+		writeJSON(w, map[string]any{"error": "Virtual pool manager not available"})
+		return
+	}
+
+	pool := s.vpMgr.GetPool(poolName)
+	if pool == nil {
+		w.WriteHeader(http.StatusNotFound)
+		writeJSON(w, map[string]any{"error": fmt.Sprintf("Virtual pool %q not found", poolName)})
+		return
+	}
+
+	nodes := pool.GetMatchingNodes()
+	writeJSON(w, map[string]any{
+		"pool_name": poolName,
+		"nodes":     nodes,
+	})
 }

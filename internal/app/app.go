@@ -11,6 +11,7 @@ import (
 	"easy_proxies/internal/config"
 	"easy_proxies/internal/monitor"
 	"easy_proxies/internal/subscription"
+	"easy_proxies/internal/virtualpool"
 )
 
 // Run builds the runtime components from config and blocks until shutdown.
@@ -55,6 +56,21 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		// Wire up subscription manager to monitor server for API endpoints
 		if server := boxMgr.MonitorServer(); server != nil {
 			server.SetSubscriptionRefresher(subMgr)
+		}
+	}
+
+	// Create and start VirtualPoolManager if configured
+	var vpMgr *virtualpool.Manager
+	if len(cfg.VirtualPools) > 0 {
+		vpMgr = virtualpool.NewManager(cfg, boxMgr.MonitorManager())
+		if err := vpMgr.Start(); err != nil {
+			return fmt.Errorf("start virtual pool manager: %w", err)
+		}
+		defer vpMgr.Stop()
+
+		// Wire up virtual pool manager to monitor server for API endpoints
+		if server := boxMgr.MonitorServer(); server != nil {
+			server.SetVirtualPoolManager(vpMgr)
 		}
 	}
 

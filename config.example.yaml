@@ -88,6 +88,44 @@ multi_port:
   password: mppass                  # 代理认证密码（可选）
 
 # ═══════════════════════════════════════════════════════════════
+# 虚拟池配置（所有模式可用）
+# 虚拟池允许通过正则表达式筛选节点，创建独立的负载均衡入口
+# ═══════════════════════════════════════════════════════════════
+virtual_pools:
+  # 示例 1: 美国节点池 - 轮询策略
+  # - name: "US_Pool"                # 虚拟池名称（唯一标识）
+  #   regular: ".*美国.*"             # 正则表达式，匹配节点名称
+  #   address: 0.0.0.0               # 监听地址
+  #   port: 3001                     # 监听端口（不能与其他端口冲突）
+  #   username: ususer               # 认证用户名（可选）
+  #   password: uspass               # 认证密码（可选）
+  #   strategy: sequential           # 负载均衡策略：sequential/random/balance
+
+  # 示例 2: 香港节点池 - 随机策略
+  # - name: "HK_Pool"
+  #   regular: ".*香港.*"
+  #   address: 0.0.0.0
+  #   port: 3002
+  #   username: hkuser
+  #   password: hkpass
+  #   strategy: random
+
+  # 示例 3: 低延迟节点池 - 带延迟阈值过滤
+  # - name: "Fast_Pool"
+  #   regular: ".*"                  # 匹配所有节点
+  #   address: 0.0.0.0
+  #   port: 3003
+  #   strategy: balance              # 最少连接数优先
+  #   max_latency_ms: 200            # 只选择延迟低于 200ms 的节点
+
+  # 示例 4: 日本节点池
+  # - name: "JP_Pool"
+  #   regular: ".*(日本|Japan|JP).*"  # 支持复杂正则
+  #   address: 0.0.0.0
+  #   port: 3004
+  #   strategy: sequential
+
+# ═══════════════════════════════════════════════════════════════
 # 节点配置方式（三选一或混合使用）
 # ═══════════════════════════════════════════════════════════════
 

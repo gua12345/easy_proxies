@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ type Config struct {
 	Pool                PoolConfig                `yaml:"pool"`
 	Management          ManagementConfig          `yaml:"management"`
 	SubscriptionRefresh SubscriptionRefreshConfig `yaml:"subscription_refresh"`
+	VirtualPools        []VirtualPoolConfig       `yaml:"virtual_pools"`        // 虚拟池配置列表
 	Nodes               []NodeConfig              `yaml:"nodes"`
 	NodesFile           string                    `yaml:"nodes_file"`    // 节点文件路径，每行一个 URI
 	Subscriptions       []string                  `yaml:"subscriptions"` // 订阅链接列表
@@ -74,6 +76,19 @@ type SubscriptionRefreshConfig struct {
 	HealthCheckTimeout time.Duration `yaml:"health_check_timeout"` // 新节点健康检查超时
 	DrainTimeout       time.Duration `yaml:"drain_timeout"`        // 旧实例排空超时时间
 	MinAvailableNodes  int           `yaml:"min_available_nodes"`  // 最少可用节点数，低于此值不切换
+}
+
+// VirtualPoolConfig 定义虚拟池配置
+// 虚拟池允许用户通过正则表达式筛选节点，创建独立的负载均衡入口
+type VirtualPoolConfig struct {
+	Name         string `yaml:"name"`                    // 虚拟池名称（唯一标识）
+	Regular      string `yaml:"regular"`                 // 正则表达式，用于匹配节点名称
+	Address      string `yaml:"address"`                 // 监听地址
+	Port         uint16 `yaml:"port"`                    // 监听端口
+	Username     string `yaml:"username,omitempty"`      // 认证用户名（可选）
+	Password     string `yaml:"password,omitempty"`      // 认证密码（可选）
+	Strategy     string `yaml:"strategy,omitempty"`      // 负载均衡策略：sequential/random/balance，默认 sequential
+	MaxLatencyMs int    `yaml:"max_latency_ms,omitempty"` // 最大延迟阈值（毫秒），可选的额外过滤条件
 }
 
 // NodeSource indicates where a node configuration originated from.
@@ -317,6 +332,11 @@ func (c *Config) normalize() error {
 				c.Nodes[idx].Port = newPort
 			}
 		}
+	}
+
+	// 验证虚拟池配置
+	if err := c.validateVirtualPools(); err != nil {
+		return err
 	}
 
 	return nil
@@ -991,4 +1011,113 @@ func isPortAvailable(address string, port uint16) bool {
 	}
 	_ = ln.Close()
 	return true
+}
+
+// validateVirtualPools 验证虚拟池配置
+// 检查名称唯一性、端口冲突、正则表达式语法、策略有效性
+func (c *Config) validateVirtualPools() error {
+	if len(c.VirtualPools) == 0 {
+		return nil
+	}
+
+	// 收集已使用的端口
+	usedPorts := make(map[uint16]string) // port -> owner name
+
+	// 添加 listener 端口（pool/hybrid 模式）
+	if c.Mode == "pool" || c.Mode == "hybrid" {
+		usedPorts[c.Listener.Port] = "listener"
+	}
+
+	// 添加 management 端口
+	if c.ManagementEnabled() {
+		_, portStr, err := net.SplitHostPort(c.Management.Listen)
+		if err == nil {
+			var mgmtPort int
+			fmt.Sscanf(portStr, "%d", &mgmtPort)
+			if mgmtPort > 0 && mgmtPort <= 65535 {
+				usedPorts[uint16(mgmtPort)] = "management"
+			}
+		}
+	}
+
+	// 添加节点端口（multi-port/hybrid 模式）
+	if c.Mode == "multi-port" || c.Mode == "hybrid" {
+		for _, node := range c.Nodes {
+			if node.Port > 0 {
+				usedPorts[node.Port] = fmt.Sprintf("node:%s", node.Name)
+			}
+		}
+	}
+
+	// 收集虚拟池名称用于唯一性检查
+	poolNames := make(map[string]bool)
+
+	for idx, pool := range c.VirtualPools {
+		// 验证名称非空
+		if pool.Name == "" {
+			return fmt.Errorf("virtual_pools[%d]: name is required", idx)
+		}
+
+		// 验证名称唯一性
+		if poolNames[pool.Name] {
+			return fmt.Errorf("virtual_pools[%d]: duplicate pool name %q", idx, pool.Name)
+		}
+		poolNames[pool.Name] = true
+
+		// 验证正则表达式非空
+		if pool.Regular == "" {
+			return fmt.Errorf("virtual_pools[%d] %q: regular expression is required", idx, pool.Name)
+		}
+
+		// 验证正则表达式语法
+		if _, err := regexp.Compile(pool.Regular); err != nil {
+			return fmt.Errorf("virtual_pools[%d] %q: invalid regular expression %q: %w", idx, pool.Name, pool.Regular, err)
+		}
+
+		// 验证地址非空
+		if pool.Address == "" {
+			return fmt.Errorf("virtual_pools[%d] %q: address is required", idx, pool.Name)
+		}
+
+		// 验证端口范围
+		if pool.Port == 0 {
+			return fmt.Errorf("virtual_pools[%d] %q: port is required", idx, pool.Name)
+		}
+		if pool.Port > 65535 {
+			return fmt.Errorf("virtual_pools[%d] %q: port %d is out of range (1-65535)", idx, pool.Name, pool.Port)
+		}
+
+		// 验证端口冲突
+		if owner, exists := usedPorts[pool.Port]; exists {
+			return fmt.Errorf("virtual_pools[%d] %q: port %d conflicts with %s", idx, pool.Name, pool.Port, owner)
+		}
+		usedPorts[pool.Port] = fmt.Sprintf("virtual_pool:%s", pool.Name)
+
+		// 验证负载均衡策略
+		if pool.Strategy != "" {
+			switch pool.Strategy {
+			case "sequential", "random", "balance":
+				// 有效策略
+			default:
+				return fmt.Errorf("virtual_pools[%d] %q: invalid strategy %q (use 'sequential', 'random', or 'balance')", idx, pool.Name, pool.Strategy)
+			}
+		}
+
+		// 设置默认策略
+		if c.VirtualPools[idx].Strategy == "" {
+			c.VirtualPools[idx].Strategy = "sequential"
+		}
+
+		// 设置默认地址
+		if c.VirtualPools[idx].Address == "" {
+			c.VirtualPools[idx].Address = "0.0.0.0"
+		}
+
+		// 验证延迟阈值
+		if pool.MaxLatencyMs < 0 {
+			return fmt.Errorf("virtual_pools[%d] %q: max_latency_ms cannot be negative", idx, pool.Name)
+		}
+	}
+
+	return nil
 }

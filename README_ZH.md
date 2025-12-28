@@ -18,6 +18,7 @@
 - **节点池模式**: 自动故障转移、负载均衡
 - **多端口模式**: 每个节点独立监听端口
 - **混合模式**: 同时启用节点池 + 多端口，节点状态共享同步
+- **虚拟池**: 通过正则表达式筛选节点，创建多个独立的负载均衡入口
 - **Web 监控面板**: 实时查看节点状态、延迟探测、一键导出节点
 - **自动健康检查**: 启动时自动检测所有节点可用性，定期（5分钟）检查节点状态
 - **智能节点过滤**: 自动过滤不可用节点，WebUI 和导出按延迟排序
@@ -114,6 +115,37 @@ pool:
 
 - 节点池入口：`http://user:pass@0.0.0.0:2323`
 - 多端口入口：`http://mpuser:mppass@0.0.0.0:24000+`
+
+### 虚拟池（Virtual Pools）
+
+虚拟池允许通过正则表达式筛选节点，创建多个独立的负载均衡入口。适用于需要按地区、类型等分组使用节点的场景。
+
+```yaml
+virtual_pools:
+  # 美国节点池
+  - name: "US_Pool"
+    regular: ".*美国.*"           # 正则匹配节点名称
+    address: 0.0.0.0
+    port: 3001
+    username: ususer              # 可选认证
+    password: uspass
+    strategy: sequential          # sequential/random/balance
+
+  # 低延迟节点池
+  - name: "Fast_Pool"
+    regular: ".*"                 # 匹配所有节点
+    address: 0.0.0.0
+    port: 3002
+    strategy: balance
+    max_latency_ms: 200           # 只选择延迟 < 200ms 的节点
+```
+
+**使用方式：** `http://ususer:uspass@localhost:3001`
+
+**负载均衡策略：**
+- `sequential`: 顺序轮询（默认）
+- `random`: 随机选择
+- `balance`: 最少连接数优先
 
 ### 节点配置
 
@@ -273,6 +305,8 @@ curl -X POST http://localhost:9090/api/reload \
 | PUT | `/api/settings` | 更新设置 |
 | GET | `/api/subscription/status` | 订阅状态 |
 | POST | `/api/subscription/refresh` | 刷新订阅 |
+| GET | `/api/virtual_pools/status` | 虚拟池状态 |
+| GET | `/api/virtual_pools/:name/nodes` | 虚拟池节点列表 |
 
 ## 健康检查机制
 
@@ -313,6 +347,7 @@ subscription_refresh:
 | 2323 | 节点池/混合模式入口 |
 | 9090 | Web 监控面板 |
 | 24000+ | 多端口/混合模式节点 |
+| 自定义 | 虚拟池入口（在 `virtual_pools` 中配置） |
 
 ## Docker 部署
 
@@ -356,7 +391,7 @@ services:
 go build -o easy-proxies ./cmd/easy_proxies
 
 # 完整功能构建（推荐）
-go build -tags "with_utls with_quic with_grpc with_wireguard with_gvisor" -o easy-proxies ./cmd/easy_proxies
+go build -tags "with_utls with_quic with_grpc with_wireguard with_gvisor" -o easy-proxies.exe ./cmd/easy_proxies
 ```
 
 ## 许可证
