@@ -5,10 +5,10 @@ package virtualpool
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
 	"easy_proxies/internal/config"
+	"easy_proxies/internal/logger"
 	"easy_proxies/internal/monitor"
 )
 
@@ -41,11 +41,11 @@ func (m *Manager) Start() error {
 	defer m.mu.Unlock()
 
 	if len(m.cfg.VirtualPools) == 0 {
-		log.Println("📦 No virtual pools configured")
+		logger.Infof("📦 No virtual pools configured")
 		return nil
 	}
 
-	log.Printf("📦 Starting %d virtual pool(s)...", len(m.cfg.VirtualPools))
+	logger.Infof("📦 Starting %d virtual pool(s)...", len(m.cfg.VirtualPools))
 
 	for _, poolCfg := range m.cfg.VirtualPools {
 		pool, err := NewVirtualPool(m.ctx, poolCfg, m.monitorMgr, m.cfg)
@@ -66,8 +66,10 @@ func (m *Manager) Start() error {
 		}
 
 		m.pools[poolCfg.Name] = pool
-		log.Printf("✅ Virtual pool %q started on %s:%d (strategy: %s, regex: %s)",
-			poolCfg.Name, poolCfg.Address, poolCfg.Port, poolCfg.Strategy, poolCfg.Regular)
+		// 获取匹配的节点数量
+		nodeCount := len(pool.GetMatchingNodes())
+		logger.Infof("✅ Virtual pool %q started on %s:%d (strategy: %s, nodes: %d)",
+			poolCfg.Name, poolCfg.Address, poolCfg.Port, poolCfg.Strategy, nodeCount)
 	}
 
 	return nil
@@ -82,7 +84,7 @@ func (m *Manager) Stop() {
 
 	for name, pool := range m.pools {
 		pool.Stop()
-		log.Printf("🛑 Virtual pool %q stopped", name)
+		logger.Infof("🛑 Virtual pool %q stopped", name)
 	}
 	m.pools = make(map[string]*VirtualPool)
 }

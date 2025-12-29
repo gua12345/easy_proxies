@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"easy_proxies/internal/config"
+	"easy_proxies/internal/logger"
 )
 
 //go:embed assets/index.html
@@ -199,15 +200,15 @@ func (s *Server) Start(ctx context.Context) {
 	if s == nil || s.srv == nil {
 		return
 	}
-	s.logger.Printf("Starting monitor server on %s", s.cfg.Listen)
+	logger.Infof("Starting monitor server on %s", s.cfg.Listen)
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Printf("❌ Monitor server error: %v", err)
+			logger.Errorf("Monitor server error: %v", err)
 		}
 	}()
 	// Give server a moment to start and check for immediate errors
 	time.Sleep(100 * time.Millisecond)
-	s.logger.Printf("✅ Monitor server started on http://%s", s.cfg.Listen)
+	logger.Infof("✅ Monitor server started on http://%s", s.cfg.Listen)
 
 	go func() {
 		<-ctx.Done()

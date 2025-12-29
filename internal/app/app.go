@@ -9,6 +9,7 @@ import (
 
 	"easy_proxies/internal/boxmgr"
 	"easy_proxies/internal/config"
+	"easy_proxies/internal/logger"
 	"easy_proxies/internal/monitor"
 	"easy_proxies/internal/subscription"
 	"easy_proxies/internal/virtualpool"
@@ -72,6 +73,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		if server := boxMgr.MonitorServer(); server != nil {
 			server.SetVirtualPoolManager(vpMgr)
 		}
+
+		// 输出虚拟池 Entry Points 信息
+		printVirtualPoolLinks(cfg, vpMgr)
 	}
 
 	// Wait for shutdown signal
@@ -86,4 +90,35 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+// printVirtualPoolLinks 输出虚拟池 Entry Points 信息
+func printVirtualPoolLinks(cfg *config.Config, vpMgr *virtualpool.Manager) {
+	if vpMgr == nil || len(cfg.VirtualPools) == 0 {
+		return
+	}
+
+	logger.Print("")
+	logger.Print("🔮 Virtual Pool Entry Points:")
+	logger.Print("───────────────────────────────────────────────────────────────")
+
+	for _, poolCfg := range cfg.VirtualPools {
+		pool := vpMgr.GetPool(poolCfg.Name)
+		nodeCount := 0
+		if pool != nil {
+			nodeCount = len(pool.GetMatchingNodes())
+		}
+
+		var auth string
+		if poolCfg.Username != "" {
+			auth = fmt.Sprintf("%s:%s@", poolCfg.Username, poolCfg.Password)
+		}
+		proxyURL := fmt.Sprintf("http://%s%s:%d", auth, poolCfg.Address, poolCfg.Port)
+
+		logger.Print(fmt.Sprintf("   [%d] %s (nodes: %d, strategy: %s)", poolCfg.Port, poolCfg.Name, nodeCount, poolCfg.Strategy))
+		logger.Print(fmt.Sprintf("       %s", proxyURL))
+	}
+
+	logger.Print("───────────────────────────────────────────────────────────────")
+	logger.Print("")
 }

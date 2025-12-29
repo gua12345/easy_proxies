@@ -13,6 +13,12 @@ mode: pool
 # 可选值：debug, info, warn, error
 log_level: info
 
+# sing-box 核心日志级别（可选）
+# 可选值：trace, debug, info, warn, error, fatal, panic
+# 默认值：warn（减少 sing-box 核心的日志输出）
+# 如果需要调试 sing-box 核心问题，可以设置为 debug 或 trace
+singbox_log_level: warn
+
 # 外部 IP 地址（可选）
 # 用于导出代理池时替换 0.0.0.0
 # Docker 部署时建议配置为服务器公网 IP

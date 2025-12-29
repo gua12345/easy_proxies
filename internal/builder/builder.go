@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"easy_proxies/internal/config"
+	"easy_proxies/internal/logger"
 	poolout "easy_proxies/internal/outbound/pool"
 
 	C "github.com/sagernet/sing-box/constant"
@@ -45,7 +45,7 @@ func Build(cfg *config.Config) (option.Options, error) {
 
 		outbound, err := buildNodeOutbound(tag, node.URI, cfg.SkipCertVerify)
 		if err != nil {
-			log.Printf("❌ Failed to build node '%s': %v (skipping)", node.Name, err)
+			logger.Warnf("Failed to build node '%s': %v (skipping)", node.Name, err)
 			failedNodes = append(failedNodes, node.Name)
 			continue
 		}
@@ -74,9 +74,9 @@ func Build(cfg *config.Config) (option.Options, error) {
 
 	// Log summary
 	if len(failedNodes) > 0 {
-		log.Printf("⚠️  %d/%d nodes failed and were skipped: %v", len(failedNodes), len(cfg.Nodes), failedNodes)
+		logger.Warnf("%d/%d nodes failed and were skipped: %v", len(failedNodes), len(cfg.Nodes), failedNodes)
 	}
-	log.Printf("✅ Successfully built %d/%d nodes", len(baseOutbounds), len(cfg.Nodes))
+	logger.Infof("✅ Successfully built %d/%d nodes", len(baseOutbounds), len(cfg.Nodes))
 
 	// Print proxy links for each node
 	printProxyLinks(cfg, metadata)
@@ -175,8 +175,14 @@ func Build(cfg *config.Config) (option.Options, error) {
 		}
 	}
 
+	// 使用配置的 sing-box 日志级别，默认为 warn
+	singboxLogLevel := strings.ToLower(cfg.SingboxLogLevel)
+	if singboxLogLevel == "" {
+		singboxLogLevel = "warn"
+	}
+
 	opts := option.Options{
-		Log:       &option.LogOptions{Level: strings.ToLower(cfg.LogLevel)},
+		Log:       &option.LogOptions{Level: singboxLogLevel},
 		Inbounds:  inbounds,
 		Outbounds: outbounds,
 		Route:     &route,
@@ -404,7 +410,7 @@ func buildV2RayTransport(query url.Values) (*option.V2RayTransportOptions, error
 		options.HTTPUpgradeOptions.Path = query.Get("path")
 	case "xhttp":
 		// XHTTP is not supported by sing-box, fallback to HTTPUpgrade
-		log.Printf("⚠️  XHTTP transport not supported by sing-box, falling back to HTTPUpgrade")
+		logger.Warnf("XHTTP transport not supported by sing-box, falling back to HTTPUpgrade")
 		options.Type = C.V2RayTransportTypeHTTPUpgrade
 		options.HTTPUpgradeOptions.Path = query.Get("path")
 		if host := query.Get("host"); host != "" {
@@ -779,9 +785,9 @@ func atoiDefault(value string) int {
 
 // printProxyLinks prints all proxy connection information at startup
 func printProxyLinks(cfg *config.Config, metadata map[string]poolout.MemberMeta) {
-	log.Println("")
-	log.Println("📡 Proxy Links:")
-	log.Println("═══════════════════════════════════════════════════════════════")
+	logger.Print("")
+	logger.Print("📡 Proxy Links:")
+	logger.Print("═══════════════════════════════════════════════════════════════")
 
 	showPoolEntry := cfg.Mode == "pool" || cfg.Mode == "hybrid"
 	showMultiPort := cfg.Mode == "multi-port" || cfg.Mode == "hybrid"
@@ -793,22 +799,22 @@ func printProxyLinks(cfg *config.Config, metadata map[string]poolout.MemberMeta)
 			auth = fmt.Sprintf("%s:%s@", cfg.Listener.Username, cfg.Listener.Password)
 		}
 		proxyURL := fmt.Sprintf("http://%s%s:%d", auth, cfg.Listener.Address, cfg.Listener.Port)
-		log.Printf("🌐 Pool Entry Point:")
-		log.Printf("   %s", proxyURL)
-		log.Println("")
-		log.Printf("   Nodes in pool (%d):", len(metadata))
+		logger.Print("🌐 Pool Entry Point:")
+		logger.Print(fmt.Sprintf("   %s", proxyURL))
+		logger.Print("")
+		logger.Print(fmt.Sprintf("   Nodes in pool (%d):", len(metadata)))
 		for _, meta := range metadata {
-			log.Printf("   • %s", meta.Name)
+			logger.Print(fmt.Sprintf("   • %s", meta.Name))
 		}
 		if showMultiPort {
-			log.Println("")
+			logger.Print("")
 		}
 	}
 
 	if showMultiPort {
 		// Multi-port mode: each node has its own port
-		log.Printf("🔌 Multi-Port Entry Points (%d nodes):", len(cfg.Nodes))
-		log.Println("")
+		logger.Print(fmt.Sprintf("🔌 Multi-Port Entry Points (%d nodes):", len(cfg.Nodes)))
+		logger.Print("")
 		for _, node := range cfg.Nodes {
 			var auth string
 			username := node.Username
@@ -821,11 +827,11 @@ func printProxyLinks(cfg *config.Config, metadata map[string]poolout.MemberMeta)
 				auth = fmt.Sprintf("%s:%s@", username, password)
 			}
 			proxyURL := fmt.Sprintf("http://%s%s:%d", auth, cfg.MultiPort.Address, node.Port)
-			log.Printf("   [%d] %s", node.Port, node.Name)
-			log.Printf("       %s", proxyURL)
+			logger.Print(fmt.Sprintf("   [%d] %s", node.Port, node.Name))
+			logger.Print(fmt.Sprintf("       %s", proxyURL))
 		}
 	}
 
-	log.Println("═══════════════════════════════════════════════════════════════")
-	log.Println("")
+	logger.Print("═══════════════════════════════════════════════════════════════")
+	logger.Print("")
 }

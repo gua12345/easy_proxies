@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"easy_proxies/internal/config"
+	"easy_proxies/internal/logger"
 	"easy_proxies/internal/monitor"
 
 	"github.com/dlclark/regexp2"
@@ -119,7 +119,7 @@ func (p *VirtualPool) acceptLoop() {
 		conn, err := p.listener.Accept()
 		if err != nil {
 			if p.running.Load() {
-				log.Printf("⚠️ Virtual pool %q accept error: %v", p.cfg.Name, err)
+				logger.Warnf("Virtual pool %q accept error: %v", p.cfg.Name, err)
 			}
 			return
 		}
@@ -156,7 +156,7 @@ func (p *VirtualPool) updateNodeCache() {
 	for _, node := range allNodes {
 		matched, err := p.regex.MatchString(node.Name)
 		if err != nil {
-			log.Printf("⚠️ Virtual pool %q regex match error: %v", p.cfg.Name, err)
+			logger.Warnf("Virtual pool %q regex match error: %v", p.cfg.Name, err)
 			continue
 		}
 		if matched {
@@ -235,7 +235,7 @@ func (p *VirtualPool) handleConnection(clientConn net.Conn) {
 	reader := bufio.NewReader(clientConn)
 	req, err := http.ReadRequest(reader)
 	if err != nil {
-		log.Printf("⚠️ Virtual pool %q read request error: %v", p.cfg.Name, err)
+		logger.Warnf("Virtual pool %q read request error: %v", p.cfg.Name, err)
 		return
 	}
 
@@ -271,7 +271,7 @@ func (p *VirtualPool) handleConnection(clientConn net.Conn) {
 	// 选择一个节点
 	nodes := p.getMatchingNodes()
 	if len(nodes) == 0 {
-		log.Printf("⚠️ Virtual pool %q has no available nodes", p.cfg.Name)
+		logger.Warnf("Virtual pool %q has no available nodes", p.cfg.Name)
 		p.sendResponse(clientConn, "503 Service Unavailable", nil)
 		return
 	}
@@ -282,8 +282,8 @@ func (p *VirtualPool) handleConnection(clientConn net.Conn) {
 		return
 	}
 
-	// 调试日志：显示选择的节点
-	log.Printf("🔄 Virtual pool %q selected node: %s (port: %d, strategy: %s, total nodes: %d)",
+	// 调试日志：显示选择的节点（归为 debug 级别）
+	logger.Debugf("Virtual pool %q selected node: %s (port: %d, strategy: %s, total nodes: %d)",
 		p.cfg.Name, selectedNode.Name, selectedNode.Port, p.cfg.Strategy, len(nodes))
 
 	// 清除读取超时
@@ -293,7 +293,7 @@ func (p *VirtualPool) handleConnection(clientConn net.Conn) {
 	proxyAddr := fmt.Sprintf("%s:%d", p.getProxyHost(selectedNode), selectedNode.Port)
 	proxyConn, err := net.DialTimeout("tcp", proxyAddr, 10*time.Second)
 	if err != nil {
-		log.Printf("⚠️ Virtual pool %q connect to proxy %s error: %v", p.cfg.Name, proxyAddr, err)
+		logger.Warnf("Virtual pool %q connect to proxy %s error: %v", p.cfg.Name, proxyAddr, err)
 		p.sendResponse(clientConn, "502 Bad Gateway", nil)
 		return
 	}
@@ -317,7 +317,7 @@ func (p *VirtualPool) handleConnection(clientConn net.Conn) {
 	// 发送 CONNECT 请求到上游代理
 	_, err = proxyConn.Write([]byte(connectReq))
 	if err != nil {
-		log.Printf("⚠️ Virtual pool %q send CONNECT error: %v", p.cfg.Name, err)
+		logger.Warnf("Virtual pool %q send CONNECT error: %v", p.cfg.Name, err)
 		p.sendResponse(clientConn, "502 Bad Gateway", nil)
 		return
 	}
@@ -326,14 +326,14 @@ func (p *VirtualPool) handleConnection(clientConn net.Conn) {
 	proxyReader := bufio.NewReader(proxyConn)
 	resp, err := http.ReadResponse(proxyReader, nil)
 	if err != nil {
-		log.Printf("⚠️ Virtual pool %q read proxy response error: %v", p.cfg.Name, err)
+		logger.Warnf("Virtual pool %q read proxy response error: %v", p.cfg.Name, err)
 		p.sendResponse(clientConn, "502 Bad Gateway", nil)
 		return
 	}
 	resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		log.Printf("⚠️ Virtual pool %q proxy returned %d", p.cfg.Name, resp.StatusCode)
+		logger.Warnf("Virtual pool %q proxy returned %d", p.cfg.Name, resp.StatusCode)
 		p.sendResponse(clientConn, fmt.Sprintf("%d %s", resp.StatusCode, resp.Status), nil)
 		return
 	}

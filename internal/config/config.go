@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -13,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"easy_proxies/internal/logger"
 
 	"github.com/dlclark/regexp2"
 	"gopkg.in/yaml.v3"
@@ -31,7 +32,8 @@ type Config struct {
 	NodesFile           string                    `yaml:"nodes_file"`    // 节点文件路径，每行一个 URI
 	Subscriptions       []string                  `yaml:"subscriptions"` // 订阅链接列表
 	ExternalIP          string                    `yaml:"external_ip"`      // 外部 IP 地址，用于导出时替换 0.0.0.0
-	LogLevel            string                    `yaml:"log_level"`
+	LogLevel            string                    `yaml:"log_level"`         // 应用日志级别 (debug/info/warn/error)
+	SingboxLogLevel     string                    `yaml:"singbox_log_level"` // sing-box 核心日志级别，默认 warn
 	SkipCertVerify      bool                      `yaml:"skip_cert_verify"` // 全局跳过 SSL 证书验证
 
 	filePath string `yaml:"-"` // 配置文件路径，用于保存
@@ -226,10 +228,10 @@ func (c *Config) normalize() error {
 		for _, subURL := range c.Subscriptions {
 			nodes, err := loadNodesFromSubscription(subURL, subTimeout)
 			if err != nil {
-				log.Printf("⚠️ Failed to load subscription %q: %v (skipping)", subURL, err)
+				logger.Warnf("Failed to load subscription %q: %v (skipping)", subURL, err)
 				continue
 			}
-			log.Printf("✅ Loaded %d nodes from subscription", len(nodes))
+			logger.Infof("✅ Loaded %d nodes from subscription", len(nodes))
 			subNodes = append(subNodes, nodes...)
 		}
 		// Mark subscription nodes and write to nodes.txt
@@ -245,9 +247,9 @@ func (c *Config) normalize() error {
 			}
 			// Write subscription nodes to nodes.txt
 			if err := writeNodesToFile(nodesFilePath, subNodes); err != nil {
-				log.Printf("⚠️ Failed to write nodes to %q: %v", nodesFilePath, err)
+				logger.Warnf("Failed to write nodes to %q: %v", nodesFilePath, err)
 			} else {
-				log.Printf("✅ Written %d subscription nodes to %s", len(subNodes), nodesFilePath)
+				logger.Infof("✅ Written %d subscription nodes to %s", len(subNodes), nodesFilePath)
 			}
 		}
 		c.Nodes = append(c.Nodes, subNodes...)
@@ -285,7 +287,7 @@ func (c *Config) normalize() error {
 		// Auto-assign port in multi-port/hybrid mode, skip occupied ports
 		if c.Nodes[idx].Port == 0 && (c.Mode == "multi-port" || c.Mode == "hybrid") {
 			for !isPortAvailable(c.MultiPort.Address, portCursor) {
-				log.Printf("⚠️  Port %d is in use, trying next port", portCursor)
+				logger.Warnf("Port %d is in use, trying next port", portCursor)
 				portCursor++
 				if portCursor > 65535 {
 					return fmt.Errorf("no available ports found starting from %d", c.MultiPort.BasePort)
@@ -308,6 +310,9 @@ func (c *Config) normalize() error {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
+	if c.SingboxLogLevel == "" {
+		c.SingboxLogLevel = "warn" // 默认抑制 sing-box 的 info 级别日志
+	}
 
 	// Auto-fix port conflicts in hybrid mode (pool port vs multi-port)
 	if c.Mode == "hybrid" {
@@ -327,7 +332,7 @@ func (c *Config) normalize() error {
 						return fmt.Errorf("no available port for node %q after conflict with pool port %d", c.Nodes[idx].Name, poolPort)
 					}
 				}
-				log.Printf("⚠️  Node %q port %d conflicts with pool port, reassigned to %d", c.Nodes[idx].Name, poolPort, newPort)
+				logger.Warnf("Node %q port %d conflicts with pool port, reassigned to %d", c.Nodes[idx].Name, poolPort, newPort)
 				usedPorts[newPort] = true
 				c.Nodes[idx].Port = newPort
 			}
@@ -453,7 +458,7 @@ func (c *Config) NormalizeWithPortMap(portMap map[string]uint16) error {
 			if existingPort, ok := portMap[nodeKey]; ok && existingPort > 0 {
 				c.Nodes[idx].Port = existingPort
 				usedPorts[existingPort] = true
-				log.Printf("✅ Preserved port %d for node %q", existingPort, c.Nodes[idx].Name)
+				logger.Debugf("Preserved port %d for node %q", existingPort, c.Nodes[idx].Name)
 			}
 		}
 	}
@@ -471,7 +476,7 @@ func (c *Config) NormalizeWithPortMap(portMap map[string]uint16) error {
 			}
 			c.Nodes[idx].Port = portCursor
 			usedPorts[portCursor] = true
-			log.Printf("📌 Assigned new port %d for node %q", portCursor, c.Nodes[idx].Name)
+			logger.Debugf("Assigned new port %d for node %q", portCursor, c.Nodes[idx].Name)
 			portCursor++
 		} else if c.Nodes[idx].Port == 0 {
 			c.Nodes[idx].Port = portCursor
@@ -489,6 +494,9 @@ func (c *Config) NormalizeWithPortMap(portMap map[string]uint16) error {
 
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
+	}
+	if c.SingboxLogLevel == "" {
+		c.SingboxLogLevel = "warn" // 默认抑制 sing-box 的 info 级别日志
 	}
 
 	return nil

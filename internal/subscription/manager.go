@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +17,7 @@ import (
 
 	"easy_proxies/internal/boxmgr"
 	"easy_proxies/internal/config"
+	"easy_proxies/internal/logger"
 	"easy_proxies/internal/monitor"
 )
 
@@ -533,13 +533,13 @@ func isProxyURI(s string) bool {
 type defaultLogger struct{}
 
 func (defaultLogger) Infof(format string, args ...any) {
-	log.Printf("[subscription] "+format, args...)
+	logger.Infof("[subscription] "+format, args...)
 }
 
 func (defaultLogger) Warnf(format string, args ...any) {
-	log.Printf("[subscription] WARN: "+format, args...)
+	logger.Warnf("[subscription] "+format, args...)
 }
 
 func (defaultLogger) Errorf(format string, args ...any) {
-	log.Printf("[subscription] ERROR: "+format, args...)
+	logger.Errorf("[subscription] "+format, args...)
 }

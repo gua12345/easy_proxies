@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/url"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 
 	"easy_proxies/internal/builder"
 	"easy_proxies/internal/config"
+	"easy_proxies/internal/logger"
 	"easy_proxies/internal/monitor"
 	"easy_proxies/internal/outbound/pool"
 
@@ -421,7 +421,7 @@ func (m *Manager) ensureMonitor(ctx context.Context) error {
 	var serverToStart *monitor.Server
 	if m.monitorCfg.Enabled {
 		if m.monitorServer == nil {
-			serverToStart = monitor.NewServer(m.monitorCfg, monitorMgr, log.Default())
+			serverToStart = monitor.NewServer(m.monitorCfg, monitorMgr, nil)
 			m.monitorServer = serverToStart
 		}
 		// Set NodeManager for config CRUD endpoints
@@ -451,19 +451,19 @@ func (m *Manager) applyConfigSettings(cfg *config.Config) {
 	m.minAvailableNodes = cfg.SubscriptionRefresh.MinAvailableNodes
 }
 
-// defaultLogger is the fallback logger using standard log.
+// defaultLogger is the fallback logger using unified logger package.
 type defaultLogger struct{}
 
 func (defaultLogger) Infof(format string, args ...any) {
-	log.Printf("[boxmgr] "+format, args...)
+	logger.Infof("[boxmgr] "+format, args...)
 }
 
 func (defaultLogger) Warnf(format string, args ...any) {
-	log.Printf("[boxmgr] WARN: "+format, args...)
+	logger.Warnf("[boxmgr] "+format, args...)
 }
 
 func (defaultLogger) Errorf(format string, args ...any) {
-	log.Printf("[boxmgr] ERROR: "+format, args...)
+	logger.Errorf("[boxmgr] "+format, args...)
 }
 
 // monitorLoggerAdapter adapts Logger to monitor.Logger interface.
@@ -716,11 +716,11 @@ func reassignConflictingPort(cfg *config.Config, conflictPort uint16) bool {
 			for usedPorts[newPort] || !isPortAvailable(address, newPort) {
 				newPort++
 				if newPort > 65535 {
-					log.Printf("❌ No available port found for node %q", cfg.Nodes[idx].Name)
+					logger.Errorf("No available port found for node %q", cfg.Nodes[idx].Name)
 					return false
 				}
 			}
-			log.Printf("⚠️  Port %d in use, reassigning node %q to port %d", conflictPort, cfg.Nodes[idx].Name, newPort)
+			logger.Warnf("Port %d in use, reassigning node %q to port %d", conflictPort, cfg.Nodes[idx].Name, newPort)
 			cfg.Nodes[idx].Port = newPort
 			return true
 		}
