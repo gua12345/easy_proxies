@@ -11,10 +11,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
+	"github.com/dlclark/regexp2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1069,8 +1069,8 @@ func (c *Config) validateVirtualPools() error {
 			return fmt.Errorf("virtual_pools[%d] %q: regular expression is required", idx, pool.Name)
 		}
 
-		// 验证正则表达式语法
-		if _, err := regexp.Compile(pool.Regular); err != nil {
+		// 验证正则表达式语法（使用 regexp2 支持零宽断言）
+		if _, err := regexp2.Compile(pool.Regular, regexp2.RE2); err != nil {
 			return fmt.Errorf("virtual_pools[%d] %q: invalid regular expression %q: %w", idx, pool.Name, pool.Regular, err)
 		}
 

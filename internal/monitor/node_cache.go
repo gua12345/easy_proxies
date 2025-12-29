@@ -1,9 +1,10 @@
 package monitor
 
 import (
-	"regexp"
 	"sync"
 	"time"
+
+	"github.com/dlclark/regexp2"
 )
 
 // NodeCache 缓存可用节点列表，避免每次请求都遍历所有节点
@@ -66,8 +67,8 @@ func (c *NodeCache) FilterByRegex(pattern string) ([]Snapshot, error) {
 		return nil, nil // 缓存过期，返回 nil 由调用方重新获取
 	}
 
-	// 编译正则表达式
-	re, err := regexp.Compile(pattern)
+	// 编译正则表达式（使用 regexp2 支持零宽断言）
+	re, err := regexp2.Compile(pattern, regexp2.RE2)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,11 @@ func (c *NodeCache) FilterByRegex(pattern string) ([]Snapshot, error) {
 	// 筛选匹配的节点
 	var result []Snapshot
 	for _, node := range c.nodes {
-		if re.MatchString(node.Name) {
+		matched, err := re.MatchString(node.Name)
+		if err != nil {
+			continue
+		}
+		if matched {
 			result = append(result, node)
 		}
 	}

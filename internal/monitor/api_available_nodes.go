@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
+	"github.com/dlclark/regexp2"
 	"github.com/go-chi/render"
 )
 
@@ -137,7 +137,11 @@ func (s *Server) filterByRegex(nodes []Snapshot, pattern string) ([]Snapshot, er
 
 	var result []Snapshot
 	for _, node := range nodes {
-		if re.MatchString(node.Name) {
+		matched, err := re.MatchString(node.Name)
+		if err != nil {
+			continue
+		}
+		if matched {
 			result = append(result, node)
 		}
 	}
@@ -145,9 +149,9 @@ func (s *Server) filterByRegex(nodes []Snapshot, pattern string) ([]Snapshot, er
 	return result, nil
 }
 
-// compileRegex 编译正则表达式，支持中文字符
-func compileRegex(pattern string) (*regexp.Regexp, error) {
-	return regexp.Compile(pattern)
+// compileRegex 编译正则表达式，支持零宽断言和中文字符
+func compileRegex(pattern string) (*regexp2.Regexp, error) {
+	return regexp2.Compile(pattern, regexp2.RE2)
 }
 
 // selectNode 根据策略选择单个节点

@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,6 +17,8 @@ import (
 
 	"easy_proxies/internal/config"
 	"easy_proxies/internal/monitor"
+
+	"github.com/dlclark/regexp2"
 )
 
 // VirtualPool 虚拟池实例
@@ -26,7 +27,7 @@ type VirtualPool struct {
 	cfg        config.VirtualPoolConfig // 虚拟池配置
 	globalCfg  *config.Config           // 全局配置
 	monitorMgr *monitor.Manager         // 节点监控管理器
-	regex      *regexp.Regexp           // 编译后的正则表达式
+	regex      *regexp2.Regexp         // 编译后的正则表达式（支持零宽断言）
 	listener   net.Listener             // TCP 监听器
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -44,8 +45,8 @@ type VirtualPool struct {
 
 // NewVirtualPool 创建虚拟池实例
 func NewVirtualPool(ctx context.Context, cfg config.VirtualPoolConfig, monitorMgr *monitor.Manager, globalCfg *config.Config) (*VirtualPool, error) {
-	// 编译正则表达式
-	regex, err := regexp.Compile(cfg.Regular)
+	// 编译正则表达式（使用 regexp2 支持零宽断言）
+	regex, err := regexp2.Compile(cfg.Regular, regexp2.RE2)
 	if err != nil {
 		return nil, fmt.Errorf("compile regex: %w", err)
 	}
@@ -153,7 +154,12 @@ func (p *VirtualPool) updateNodeCache() {
 	// 筛选匹配正则的节点
 	var matchedNodes []monitor.Snapshot
 	for _, node := range allNodes {
-		if p.regex.MatchString(node.Name) {
+		matched, err := p.regex.MatchString(node.Name)
+		if err != nil {
+			log.Printf("⚠️ Virtual pool %q regex match error: %v", p.cfg.Name, err)
+			continue
+		}
+		if matched {
 			// 检查延迟阈值
 			if p.cfg.MaxLatencyMs > 0 && node.LastLatencyMs > 0 {
 				if node.LastLatencyMs > int64(p.cfg.MaxLatencyMs) {
