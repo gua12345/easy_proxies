@@ -136,6 +136,8 @@ GET `/api/nodes`
       "mode": "multi-port",
       "listen_address": "0.0.0.0",
       "port": 24000,
+      "username": "mpuser",
+      "password": "mppass",
       "failure_count": 0,
       "blacklisted": false,
       "blacklisted_until": null,
@@ -575,6 +577,106 @@ POST `/api/subscription/refresh`
 ```json
 {
   "error": "获取订阅失败: timeout"
+}
+```
+
+---
+
+### 虚拟池管理
+
+#### 获取虚拟池状态
+
+GET `/api/virtual_pools/status`
+
+返回所有虚拟池的状态信息。
+
+**响应 (200 OK):**
+
+```json
+{
+  "pools": [
+    {
+      "name": "US_Pool",
+      "regular": ".*美国.*",
+      "address": "0.0.0.0",
+      "port": 3001,
+      "username": "ususer",
+      "password": "uspass",
+      "strategy": "sequential",
+      "max_latency_ms": 0,
+      "node_count": 5,
+      "running": true
+    },
+    {
+      "name": "Fast_Pool",
+      "regular": ".*",
+      "address": "0.0.0.0",
+      "port": 3002,
+      "username": "",
+      "password": "",
+      "strategy": "balance",
+      "max_latency_ms": 200,
+      "node_count": 8,
+      "running": true
+    }
+  ]
+}
+```
+
+**字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | string | 虚拟池名称 |
+| `regular` | string | 节点名称匹配的正则表达式 |
+| `address` | string | 监听地址 |
+| `port` | uint16 | 监听端口 |
+| `username` | string | 代理认证用户名（可选） |
+| `password` | string | 代理认证密码（可选） |
+| `strategy` | string | 负载均衡策略（sequential/random/balance） |
+| `max_latency_ms` | int | 最大延迟阈值（毫秒），0 表示无限制 |
+| `node_count` | int | 匹配的节点数量 |
+| `running` | bool | 虚拟池是否正在运行 |
+
+#### 获取虚拟池节点列表
+
+GET `/api/virtual_pools/{name}/nodes`
+
+返回指定虚拟池匹配的节点列表。
+
+**路径参数：**
+- `name` - 虚拟池名称（需 URL 编码）
+
+**响应 (200 OK):**
+
+```json
+{
+  "pool_name": "US_Pool",
+  "nodes": [
+    {
+      "tag": "node-1",
+      "name": "美国节点1",
+      "uri": "vless://...",
+      "mode": "multi-port",
+      "listen_address": "0.0.0.0",
+      "port": 24000,
+      "username": "mpuser",
+      "password": "mppass",
+      "failure_count": 0,
+      "blacklisted": false,
+      "active_connections": 2,
+      "last_latency_ms": 120,
+      "available": true
+    }
+  ]
+}
+```
+
+**响应 (404 Not Found):**
+
+```json
+{
+  "error": "虚拟池不存在"
 }
 ```
 

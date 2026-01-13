@@ -37,6 +37,8 @@ type NodeInfo struct {
 	Mode          string `json:"mode"`
 	ListenAddress string `json:"listen_address,omitempty"`
 	Port          uint16 `json:"port,omitempty"`
+	Username      string `json:"username,omitempty"` // 代理用户名
+	Password      string `json:"password,omitempty"` // 代理密码
 }
 
 // Snapshot is a runtime view of a proxy node.

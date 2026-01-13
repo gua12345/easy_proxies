@@ -136,6 +136,8 @@ Returns runtime status of all available nodes (initial health check passed only)
       "mode": "multi-port",
       "listen_address": "0.0.0.0",
       "port": 24000,
+      "username": "mpuser",
+      "password": "mppass",
       "failure_count": 0,
       "blacklisted": false,
       "blacklisted_until": null,
@@ -575,6 +577,106 @@ Triggers immediate subscription refresh. **⚠️ This restarts the sing-box cor
 ```json
 {
   "error": "获取订阅失败: timeout"
+}
+```
+
+---
+
+### Virtual Pool Management
+
+#### Get Virtual Pools Status
+
+GET `/api/virtual_pools/status`
+
+Returns status information for all virtual pools.
+
+**Response (200 OK):**
+
+```json
+{
+  "pools": [
+    {
+      "name": "US_Pool",
+      "regular": ".*US.*",
+      "address": "0.0.0.0",
+      "port": 3001,
+      "username": "ususer",
+      "password": "uspass",
+      "strategy": "sequential",
+      "max_latency_ms": 0,
+      "node_count": 5,
+      "running": true
+    },
+    {
+      "name": "Fast_Pool",
+      "regular": ".*",
+      "address": "0.0.0.0",
+      "port": 3002,
+      "username": "",
+      "password": "",
+      "strategy": "balance",
+      "max_latency_ms": 200,
+      "node_count": 8,
+      "running": true
+    }
+  ]
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Virtual pool name |
+| `regular` | string | Regex pattern to match node names |
+| `address` | string | Listen address |
+| `port` | uint16 | Listen port |
+| `username` | string | Proxy authentication username (optional) |
+| `password` | string | Proxy authentication password (optional) |
+| `strategy` | string | Load balancing strategy (sequential/random/balance) |
+| `max_latency_ms` | int | Maximum latency threshold (milliseconds), 0 means unlimited |
+| `node_count` | int | Number of matched nodes |
+| `running` | bool | Whether the virtual pool is running |
+
+#### Get Virtual Pool Nodes
+
+GET `/api/virtual_pools/{name}/nodes`
+
+Returns the list of nodes matched by the specified virtual pool.
+
+**Path Parameters:**
+- `name` - Virtual pool name (URL encoded if needed)
+
+**Response (200 OK):**
+
+```json
+{
+  "pool_name": "US_Pool",
+  "nodes": [
+    {
+      "tag": "node-1",
+      "name": "US Node 1",
+      "uri": "vless://...",
+      "mode": "multi-port",
+      "listen_address": "0.0.0.0",
+      "port": 24000,
+      "username": "mpuser",
+      "password": "mppass",
+      "failure_count": 0,
+      "blacklisted": false,
+      "active_connections": 2,
+      "last_latency_ms": 120,
+      "available": true
+    }
+  ]
+}
+```
+
+**Response (404 Not Found):**
+
+```json
+{
+  "error": "Virtual pool not found"
 }
 ```
 

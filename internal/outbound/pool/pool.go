@@ -50,6 +50,8 @@ type MemberMeta struct {
 	Mode          string
 	ListenAddress string
 	Port          uint16
+	Username      string // 代理用户名
+	Password      string // 代理密码
 }
 
 // Register wires the pool outbound into the registry.
@@ -122,6 +124,8 @@ func newPool(ctx context.Context, _ adapter.Router, logger log.ContextLogger, ta
 				Mode:          meta.Mode,
 				ListenAddress: meta.ListenAddress,
 				Port:          meta.Port,
+				Username:      meta.Username,
+				Password:      meta.Password,
 			}
 			entry := monitorMgr.Register(info)
 			if entry != nil {
@@ -215,6 +219,8 @@ func (p *poolOutbound) initializeMembersLocked() error {
 				Mode:          meta.Mode,
 				ListenAddress: meta.ListenAddress,
 				Port:          meta.Port,
+				Username:      meta.Username,
+				Password:      meta.Password,
 			}
 			entry := p.monitor.Register(info)
 			if entry != nil {

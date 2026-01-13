@@ -1464,6 +1464,73 @@
       return '🌐'; // 默认图标
     }
 
+    // 转义 JavaScript 字符串中的特殊字符
+    function escapeForJs(str) {
+      if (!str) return '';
+      return str.replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '\\"')
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '\\r');
+    }
+
+    // 复制代理链接到剪贴板
+    function copyProxyLink(tag, listenAddr, port, username, password) {
+      // 如果监听地址是 0.0.0.0 或 ::，尝试使用外部 IP
+      let addr = listenAddr;
+      if (addr === '0.0.0.0' || addr === '::' || !addr) {
+        // 尝试从设置中获取外部 IP
+        fetch('/api/settings')
+          .then(res => res.ok ? res.json() : {})
+          .then(data => {
+            if (data.external_ip) {
+              addr = data.external_ip;
+            } else {
+              addr = window.location.hostname || 'localhost';
+            }
+            buildAndCopyProxyLink(addr, port, username, password);
+          })
+          .catch(() => {
+            addr = window.location.hostname || 'localhost';
+            buildAndCopyProxyLink(addr, port, username, password);
+          });
+      } else {
+        buildAndCopyProxyLink(addr, port, username, password);
+      }
+    }
+
+    // 构建并复制代理链接
+    function buildAndCopyProxyLink(addr, port, username, password) {
+      let proxyLink;
+      if (username && password) {
+        proxyLink = `http://${username}:${password}@${addr}:${port}`;
+      } else {
+        proxyLink = `http://${addr}:${port}`;
+      }
+
+      // 复制到剪贴板
+      navigator.clipboard.writeText(proxyLink)
+        .then(() => {
+          showToast('代理链接已复制到剪贴板', 'success');
+        })
+        .catch(err => {
+          // 降级方案：使用 textarea
+          const textarea = document.createElement('textarea');
+          textarea.value = proxyLink;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          try {
+            document.execCommand('copy');
+            showToast('代理链接已复制到剪贴板', 'success');
+          } catch (e) {
+            showToast('复制失败: ' + e.message, 'error');
+          }
+          document.body.removeChild(textarea);
+        });
+    }
+
     // 获取国家显示名称（中文）
     function getCountryName(emoji) {
       return EMOJI_TO_NAME[emoji] || emoji;
@@ -1773,6 +1840,9 @@
                 <div>✗ ${formatTime(node.last_failure)}</div>
                 ${node.blacklisted ? `<div style="color: var(--error);">⚠ 拉黑至 ${new Date(node.blacklisted_until).toLocaleString('zh-CN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>` : ''}
               </div>
+              <button class="btn btn-secondary btn-sm" onclick="copyProxyLink('${node.tag}', '${escapeForJs(node.listen_address)}', ${node.port}, '${escapeForJs(node.username || '')}', '${escapeForJs(node.password || '')}')">
+                📋 复制链接
+              </button>
               <button class="btn btn-secondary btn-sm" onclick="probe('${node.tag}')">
                 🔍 探测
               </button>
@@ -2210,6 +2280,12 @@
               <div class="vpool-stat-value" style="font-size: 16px;">${pool.max_latency_ms}ms</div>
             </div>
             ` : ''}
+          </div>
+
+          <div style="margin-top: 16px; text-align: center;">
+            <button class="btn btn-primary btn-sm" onclick="copyProxyLink('vpool-${escapeForJs(pool.name)}', '${escapeForJs(pool.address)}', ${pool.port}, '${escapeForJs(pool.username || '')}', '${escapeForJs(pool.password || '')}')">
+              📋 复制虚拟池代理链接
+            </button>
           </div>
 
           ${nodes && nodes.length > 0 ? `

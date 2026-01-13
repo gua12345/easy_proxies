@@ -56,13 +56,17 @@ func Build(cfg *config.Config) (option.Options, error) {
 			URI:  node.URI,
 			Mode: cfg.Mode,
 		}
-		// For multi-port and hybrid modes, use per-node port
+		// For multi-port and hybrid modes, use per-node port and multi-port credentials
 		if cfg.Mode == "multi-port" || cfg.Mode == "hybrid" {
 			meta.ListenAddress = cfg.MultiPort.Address
 			meta.Port = node.Port
+			meta.Username = cfg.MultiPort.Username
+			meta.Password = cfg.MultiPort.Password
 		} else {
 			meta.ListenAddress = cfg.Listener.Address
 			meta.Port = cfg.Listener.Port
+			meta.Username = cfg.Listener.Username
+			meta.Password = cfg.Listener.Password
 		}
 		metadata[tag] = meta
 	}

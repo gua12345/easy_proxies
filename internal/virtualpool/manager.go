@@ -130,6 +130,8 @@ func (m *Manager) Status() []monitor.VirtualPoolStatus {
 			MaxLatencyMs: s.MaxLatencyMs,
 			NodeCount:    s.NodeCount,
 			Running:      s.Running,
+			Username:     s.Username,
+			Password:     s.Password,
 		})
 	}
 	return statuses
@@ -137,12 +139,14 @@ func (m *Manager) Status() []monitor.VirtualPoolStatus {
 
 // PoolStatus 虚拟池状态
 type PoolStatus struct {
-	Name         string `json:"name"`          // 池名称
-	Regular      string `json:"regular"`       // 正则表达式
-	Address      string `json:"address"`       // 监听地址
-	Port         uint16 `json:"port"`          // 监听端口
-	Strategy     string `json:"strategy"`      // 负载均衡策略
+	Name         string `json:"name"`           // 池名称
+	Regular      string `json:"regular"`        // 正则表达式
+	Address      string `json:"address"`        // 监听地址
+	Port         uint16 `json:"port"`           // 监听端口
+	Strategy     string `json:"strategy"`       // 负载均衡策略
 	MaxLatencyMs int    `json:"max_latency_ms"` // 最大延迟阈值
-	NodeCount    int    `json:"node_count"`    // 匹配的节点数量
-	Running      bool   `json:"running"`       // 是否运行中
+	NodeCount    int    `json:"node_count"`     // 匹配的节点数量
+	Running      bool   `json:"running"`        // 是否运行中
+	Username     string `json:"username"`       // 代理用户名
+	Password     string `json:"password"`       // 代理密码
 }

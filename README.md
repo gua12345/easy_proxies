@@ -235,6 +235,9 @@ Access `http://localhost:9090` for:
 - Manual latency probing
 - Release blacklisted nodes
 - **One-click export** - Export available nodes as proxy URIs
+- **One-click copy proxy link** - Each node and virtual pool card has a copy button to copy the complete proxy link to clipboard
+- **Country classification and filtering** - Nodes are automatically categorized by country emoji, with keyword filtering support
+- **Virtual pool management** - View and manage virtual pool configurations, each filtering nodes by regex
 - **Settings** - Modify `external_ip` and `probe_target`
 - **Node Management** - Add, edit, delete nodes via UI
 - **Subscription status** - View and trigger refresh

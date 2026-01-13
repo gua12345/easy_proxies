@@ -72,6 +72,8 @@ type VirtualPoolStatus struct {
 	MaxLatencyMs int    `json:"max_latency_ms"`
 	NodeCount    int    `json:"node_count"`
 	Running      bool   `json:"running"`
+	Username     string `json:"username,omitempty"` // 代理用户名
+	Password     string `json:"password,omitempty"` // 代理密码
 }
 
 // VirtualPoolInstance 虚拟池实例接口

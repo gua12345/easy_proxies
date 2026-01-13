@@ -105,6 +105,8 @@ func (p *VirtualPool) Status() PoolStatus {
 		MaxLatencyMs: p.cfg.MaxLatencyMs,
 		NodeCount:    len(nodes),
 		Running:      p.running.Load(),
+		Username:     p.cfg.Username,
+		Password:     p.cfg.Password,
 	}
 }
 
