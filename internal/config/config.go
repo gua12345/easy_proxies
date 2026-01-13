@@ -68,6 +68,7 @@ type ManagementConfig struct {
 	Listen      string `yaml:"listen"`
 	ProbeTarget string `yaml:"probe_target"`
 	Password    string `yaml:"password"` // WebUI 访问密码，为空则不需要密码
+	PathPwd     string `yaml:"path_pwd"` // 路径密码，访问管理页面需要通过 /路径密码 访问，为空则使用默认路径 /
 }
 
 // SubscriptionRefreshConfig controls subscription auto-refresh and reload settings.
@@ -225,13 +226,37 @@ func (c *Config) normalize() error {
 	if len(c.Subscriptions) > 0 {
 		var subNodes []NodeConfig
 		subTimeout := c.SubscriptionRefresh.Timeout
-		for _, subURL := range c.Subscriptions {
+		for _, subEntry := range c.Subscriptions {
+			// 解析订阅名字和URL：格式为 "订阅名字:URL" 或 "URL"
+			subName, subURL := parseSubscriptionEntry(subEntry)
+
 			nodes, err := loadNodesFromSubscription(subURL, subTimeout)
 			if err != nil {
 				logger.Warnf("Failed to load subscription %q: %v (skipping)", subURL, err)
 				continue
 			}
 			logger.Infof("✅ Loaded %d nodes from subscription", len(nodes))
+
+			// 如果有订阅名字，添加到节点名称后
+			if subName != "" {
+				for idx := range nodes {
+					// 先从 URI 的 fragment 中提取节点名称（如果还没有提取）
+					if nodes[idx].Name == "" {
+						if parsed, err := url.Parse(nodes[idx].URI); err == nil && parsed.Fragment != "" {
+							if decoded, err := url.QueryUnescape(parsed.Fragment); err == nil {
+								nodes[idx].Name = decoded
+							} else {
+								nodes[idx].Name = parsed.Fragment
+							}
+						}
+					}
+					// 添加订阅名字后缀
+					if nodes[idx].Name != "" {
+						nodes[idx].Name = nodes[idx].Name + "|" + subName
+					}
+				}
+			}
+
 			subNodes = append(subNodes, nodes...)
 		}
 		// Mark subscription nodes and write to nodes.txt
@@ -508,6 +533,31 @@ func (c *Config) ManagementEnabled() bool {
 		return true
 	}
 	return *c.Management.Enabled
+}
+
+// parseSubscriptionEntry 解析订阅条目，支持 "订阅名字:URL" 或 "URL" 格式
+// 返回订阅名字和URL，如果没有订阅名字则返回空字符串
+func parseSubscriptionEntry(entry string) (name, url string) {
+	entry = strings.TrimSpace(entry)
+
+	// 查找第一个冒号的位置
+	colonIdx := strings.Index(entry, ":")
+
+	// 如果没有冒号，或者冒号是 http:// 或 https:// 的一部分，则没有订阅名字
+	if colonIdx == -1 || strings.HasPrefix(entry, "http://") || strings.HasPrefix(entry, "https://") {
+		return "", entry
+	}
+
+	// 检查冒号后面是否是 //，如果是则说明这是 URL 的一部分
+	if colonIdx+2 < len(entry) && entry[colonIdx+1:colonIdx+3] == "//" {
+		return "", entry
+	}
+
+	// 分割订阅名字和URL
+	name = strings.TrimSpace(entry[:colonIdx])
+	url = strings.TrimSpace(entry[colonIdx+1:])
+
+	return name, url
 }
 
 // loadNodesFromFile reads a nodes file where each line is a proxy URI
@@ -885,10 +935,19 @@ func (c *Config) SetFilePath(path string) {
 }
 
 // writeNodesToFile writes nodes to a file (one URI per line).
+// If node has a name, it will be encoded in the URI fragment.
 func writeNodesToFile(path string, nodes []NodeConfig) error {
 	var lines []string
 	for _, node := range nodes {
-		lines = append(lines, node.URI)
+		uri := node.URI
+		// 如果节点有名称，更新URI的fragment部分
+		if node.Name != "" {
+			if parsed, err := url.Parse(uri); err == nil {
+				parsed.Fragment = node.Name
+				uri = parsed.String()
+			}
+		}
+		lines = append(lines, uri)
 	}
 	content := strings.Join(lines, "\n")
 	if len(lines) > 0 {

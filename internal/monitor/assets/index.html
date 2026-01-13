@@ -191,9 +191,10 @@
       font-weight: 500;
     }
 
-    /* Nodes Grid */
+    /* Nodes Grid - 竖向小卡片布局 */
     .nodes-grid {
       display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 16px;
     }
 
@@ -202,10 +203,13 @@
       backdrop-filter: saturate(180%) blur(20px);
       border: 1px solid var(--border);
       border-radius: 18px;
-      padding: 28px;
+      padding: 20px;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 320px;
     }
 
     .node-card::before {
@@ -231,10 +235,9 @@
 
     .node-header {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 24px;
-      gap: 16px;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
     }
 
     .node-info {
@@ -243,7 +246,7 @@
     }
 
     .node-name {
-      font-size: 21px;
+      font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.015em;
       color: var(--text-primary);
@@ -254,10 +257,13 @@
     }
 
     .node-tag {
-      font-size: 13px;
+      font-size: 11px;
       color: var(--text-secondary);
       font-family: "SF Mono", Menlo, Monaco, monospace;
       font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .status-badge {
@@ -299,17 +305,19 @@
       background: currentColor;
     }
 
-    /* Latency Display - Prominent */
+    /* Latency Display - 紧凑版 */
     .latency-display {
       background: linear-gradient(135deg, rgba(0, 122, 255, 0.08), rgba(0, 122, 255, 0.03));
       border: 1px solid rgba(0, 122, 255, 0.15);
-      border-radius: 16px;
-      padding: 20px 24px;
-      margin-bottom: 24px;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       transition: all 0.3s;
+      text-align: center;
     }
 
     .latency-display:hover {
@@ -319,36 +327,39 @@
 
     .latency-info {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 16px;
+      gap: 4px;
+      width: 100%;
     }
 
     .latency-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
       background: linear-gradient(135deg, var(--primary), #0051d5);
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-size: 24px;
+      font-size: 16px;
       font-weight: 700;
+      margin-bottom: 4px;
     }
 
     .latency-text {
-      flex: 1;
+      width: 100%;
     }
 
     .latency-label {
-      font-size: 13px;
+      font-size: 11px;
       color: var(--text-secondary);
       margin-bottom: 4px;
       font-weight: 500;
     }
 
     .latency-value {
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--primary);
@@ -356,24 +367,25 @@
     }
 
     .latency-quality {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-secondary);
       margin-top: 4px;
       font-weight: 500;
     }
 
-    /* Metrics */
+    /* Metrics - 紧凑版 */
     .metrics {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+      flex: 1;
     }
 
     .metric {
       background: rgba(0, 0, 0, 0.02);
-      border-radius: 12px;
-      padding: 16px;
+      border-radius: 8px;
+      padding: 10px;
       transition: all 0.2s;
     }
 
@@ -382,14 +394,14 @@
     }
 
     .metric-label {
-      font-size: 12px;
+      font-size: 10px;
       color: var(--text-secondary);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       font-weight: 500;
     }
 
     .metric-value {
-      font-size: 24px;
+      font-size: 18px;
       font-weight: 700;
       letter-spacing: -0.015em;
       color: var(--text-primary);
@@ -399,20 +411,27 @@
     .metric-value.error { color: var(--error); }
     .metric-value.warning { color: var(--warning); }
 
-    /* Footer */
+    /* Footer - 紧凑版 */
     .node-footer {
-      padding-top: 20px;
+      padding-top: 12px;
       border-top: 1px solid var(--border);
       display: flex;
+      flex-direction: column;
       gap: 8px;
-      align-items: center;
+      margin-top: auto;
     }
 
     .time-info {
-      font-size: 12px;
+      font-size: 10px;
       color: var(--text-secondary);
-      line-height: 1.6;
-      flex: 1;
+      line-height: 1.4;
+    }
+
+    .node-footer .btn {
+      width: 100%;
+      justify-content: center;
+      padding: 8px 16px;
+      font-size: 13px;
     }
 
     /* Toast */
@@ -867,6 +886,243 @@
     .probe-progress-detail .success { color: var(--success); }
     .probe-progress-detail .failed { color: var(--error); }
 
+    /* 筛选和分类样式 */
+    .filter-section {
+      margin-bottom: 32px;
+    }
+
+    .filter-input-wrapper {
+      position: relative;
+      max-width: 600px;
+      margin: 0 auto 24px;
+    }
+
+    .filter-input {
+      width: 100%;
+      padding: 14px 48px 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 16px;
+      font-family: var(--sf-pro);
+      background: var(--bg-elevated);
+      backdrop-filter: saturate(180%) blur(20px);
+      transition: all 0.2s;
+    }
+
+    .filter-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+    }
+
+    .filter-clear {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 4px;
+      display: none;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .filter-clear.show {
+      display: block;
+    }
+
+    .country-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .country-filter-btn {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--bg-elevated);
+      backdrop-filter: saturate(180%) blur(20px);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .country-filter-btn:hover {
+      background: rgba(255, 255, 255, 0.95);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .country-filter-btn.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .country-filter-btn .count {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    .category-section {
+      margin-bottom: 32px;
+    }
+
+    .category-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .category-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .category-count {
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* 虚拟池样式 */
+    .vpool-card {
+      background: var(--bg-elevated);
+      backdrop-filter: saturate(180%) blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      margin-bottom: 24px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .vpool-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .vpool-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      gap: 16px;
+    }
+
+    .vpool-info {
+      flex: 1;
+    }
+
+    .vpool-name {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .vpool-pattern {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-family: "SF Mono", Menlo, Monaco, monospace;
+      background: rgba(0, 0, 0, 0.04);
+      padding: 4px 8px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+
+    .vpool-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .vpool-stat {
+      background: rgba(0, 0, 0, 0.02);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .vpool-stat-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    .vpool-stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .vpool-nodes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .vpool-node-item {
+      background: rgba(0, 0, 0, 0.02);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .vpool-node-item:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    .vpool-node-status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .vpool-node-status.healthy { background: var(--success); }
+    .vpool-node-status.warning { background: var(--warning); }
+    .vpool-node-status.error { background: var(--error); }
+    .vpool-node-status.blacklisted { background: var(--text-primary); }
+
+    .vpool-node-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .vpool-node-latency {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .app { padding: 24px 16px; }
@@ -882,6 +1138,9 @@
       .manage-actions { flex-direction: column; }
       .config-node-card { flex-direction: column; align-items: stretch; }
       .config-node-actions { justify-content: flex-end; }
+      .nodes-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+      .country-filters { gap: 6px; }
+      .country-filter-btn { padding: 6px 12px; font-size: 13px; }
     }
   </style>
 </head>
@@ -907,11 +1166,21 @@
     <!-- Tab 切换 -->
     <div class="tabs">
       <button class="tab active" onclick="switchTab('monitor')">📊 节点监控</button>
+      <button class="tab" onclick="switchTab('vpools')">🎯 虚拟池</button>
       <button class="tab" onclick="switchTab('manage')">⚙️ 节点管理</button>
     </div>
 
     <!-- 监控页面 -->
     <div id="monitorTab" class="tab-content active">
+    <!-- 筛选区域 -->
+    <div class="filter-section">
+      <div class="filter-input-wrapper">
+        <input type="text" id="filterInput" class="filter-input" placeholder="🔍 搜索节点名称..." oninput="handleFilterInput()">
+        <button class="filter-clear" id="filterClear" onclick="clearFilter()">×</button>
+      </div>
+      <div class="country-filters" id="countryFilters"></div>
+    </div>
+
     <div class="controls">
       <button class="btn btn-primary" onclick="refresh()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -974,6 +1243,25 @@
       <p>请在配置文件中添加代理节点</p>
     </div>
     </div><!-- end monitorTab -->
+
+    <!-- 虚拟池页面 -->
+    <div id="vpoolsTab" class="tab-content">
+      <div class="manage-header">
+        <h2>虚拟池管理</h2>
+        <p class="manage-desc">查看和管理虚拟池配置，每个虚拟池通过正则表达式筛选节点</p>
+      </div>
+
+      <div id="vpoolsContainer"></div>
+
+      <div id="vpoolsEmptyState" class="empty" style="display: none;">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" opacity="0.2">
+          <circle cx="32" cy="32" r="30" stroke="currentColor" stroke-width="4"/>
+          <path d="M32 16v32M16 32h32" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+        <h3>暂无虚拟池</h3>
+        <p>请在配置文件中添加虚拟池配置</p>
+      </div>
+    </div><!-- end vpoolsTab -->
 
     <!-- 节点管理页面 -->
     <div id="manageTab" class="tab-content">
@@ -1134,6 +1422,141 @@
     let autoRefreshInterval = null;
     let isAutoRefresh = true;
     let isAuthenticated = false;
+    let allNodes = []; // 存储所有节点数据
+    let currentFilter = ''; // 当前筛选关键字
+    let currentCountry = ''; // 当前选中的国家
+
+    // 国家 emoji 映射
+    const COUNTRY_EMOJIS = [
+      '🇨🇳', '🇭🇰', '🇹🇼', '🇺🇸', '🇨🇦', '🇯🇵', '🇸🇬', '🇦🇺', '🇷🇺',
+      '🇨🇭', '🇩🇪', '🇫🇷', '🇬🇧', '🇳🇱', '🇰🇷', '🇮🇳', '🇹🇭', '🇻🇳',
+      '🇵🇭', '🇮🇩', '🇲🇾', '🇧🇷', '🇦🇷', '🇲🇽', '🇨🇱', '🇨🇴', '🇪🇸',
+      '🇮🇹', '🇵🇱', '🇹🇷', '🇮🇱', '🇦🇪', '🇿🇦', '🇪🇬', '🇳🇬', '🇺🇦',
+      '🇷🇴', '🇨🇿', '🇬🇷', '🇵🇹', '🇸🇪', '🇳🇴', '🇩🇰', '🇫🇮', '🇦🇹',
+      '🇧🇪', '🇮🇪', '🇦🇱', '🇧🇬', '🇷🇸', '🇭🇷', '🇭🇺', '🇸🇰', '🇸🇮',
+      '🇱🇹', '🇱🇻', '🇪🇪', '🇺🇾', '🇵🇾', '🇳🇿', '🇵🇰', '🇧🇩'
+    ];
+
+    // emoji 到中文名称的映射
+    const EMOJI_TO_NAME = {
+      '🇨🇳': '中国', '🇭🇰': '香港', '🇹🇼': '台湾', '🇺🇸': '美国', '🇨🇦': '加拿大',
+      '🇯🇵': '日本', '🇸🇬': '新加坡', '🇦🇺': '澳大利亚', '🇷🇺': '俄罗斯', '🇨🇭': '瑞士',
+      '🇩🇪': '德国', '🇫🇷': '法国', '🇬🇧': '英国', '🇳🇱': '荷兰', '🇰🇷': '韩国',
+      '🇮🇳': '印度', '🇹🇭': '泰国', '🇻🇳': '越南', '🇵🇭': '菲律宾', '🇮🇩': '印度尼西亚',
+      '🇲🇾': '马来西亚', '🇧🇷': '巴西', '🇦🇷': '阿根廷', '🇲🇽': '墨西哥', '🇨🇱': '智利',
+      '🇨🇴': '哥伦比亚', '🇪🇸': '西班牙', '🇮🇹': '意大利', '🇵🇱': '波兰', '🇹🇷': '土耳其',
+      '🇮🇱': '以色列', '🇦🇪': '阿联酋', '🇿🇦': '南非', '🇪🇬': '埃及', '🇳🇬': '尼日利亚',
+      '🇺🇦': '乌克兰', '🇷🇴': '罗马尼亚', '🇨🇿': '捷克', '🇬🇷': '希腊', '🇵🇹': '葡萄牙',
+      '🇸🇪': '瑞典', '🇳🇴': '挪威', '🇩🇰': '丹麦', '🇫🇮': '芬兰', '🇦🇹': '奥地利',
+      '🇧🇪': '比利时', '🇮🇪': '爱尔兰', '🇦🇱': '阿尔巴尼亚', '🇧🇬': '保加利亚', '🇷🇸': '塞尔维亚',
+      '🇭🇷': '克罗地亚', '🇭🇺': '匈牙利', '🇸🇰': '斯洛伐克', '🇸🇮': '斯洛文尼亚', '🇱🇹': '立陶宛',
+      '🇱🇻': '拉脱维亚', '🇪🇪': '爱沙尼亚', '🇺🇾': '乌拉圭', '🇵🇾': '巴拉圭', '🇳🇿': '新西兰',
+      '🇵🇰': '巴基斯坦', '🇧🇩': '孟加拉国', '🌐': '其他'
+    };
+
+    // 从节点名称中提取国家 emoji
+    function extractCountryEmoji(name) {
+      for (const emoji of COUNTRY_EMOJIS) {
+        if (name.includes(emoji)) {
+          return emoji;
+        }
+      }
+      return '🌐'; // 默认图标
+    }
+
+    // 获取国家显示名称（中文）
+    function getCountryName(emoji) {
+      return EMOJI_TO_NAME[emoji] || emoji;
+    }
+
+    // 按国家分组节点
+    function groupNodesByCountry(nodes) {
+      const groups = {};
+      nodes.forEach(node => {
+        const country = extractCountryEmoji(node.name || node.tag);
+        if (!groups[country]) {
+          groups[country] = [];
+        }
+        groups[country].push(node);
+      });
+      return groups;
+    }
+
+    // 筛选输入处理
+    function handleFilterInput() {
+      const input = document.getElementById('filterInput');
+      const clearBtn = document.getElementById('filterClear');
+      currentFilter = input.value.toLowerCase().trim();
+
+      if (currentFilter) {
+        clearBtn.classList.add('show');
+      } else {
+        clearBtn.classList.remove('show');
+      }
+
+      renderFilteredNodes();
+    }
+
+    // 清除筛选
+    function clearFilter() {
+      document.getElementById('filterInput').value = '';
+      document.getElementById('filterClear').classList.remove('show');
+      currentFilter = '';
+      renderFilteredNodes();
+    }
+
+    // 选择国家筛选
+    function selectCountry(country) {
+      if (currentCountry === country) {
+        currentCountry = '';
+      } else {
+        currentCountry = country;
+      }
+      updateCountryFilters();
+      renderFilteredNodes();
+    }
+
+    // 更新国家筛选按钮
+    function updateCountryFilters() {
+      const container = document.getElementById('countryFilters');
+      const groups = groupNodesByCountry(allNodes);
+
+      // 按节点数量排序
+      const sortedCountries = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+
+      container.innerHTML = sortedCountries.map(([country, nodes]) => {
+        const active = currentCountry === country ? 'active' : '';
+        const countryName = getCountryName(country); // 使用中文名称
+        return `
+          <button class="country-filter-btn ${active}" onclick="selectCountry('${country}')">
+            <span>${countryName}</span>
+            <span class="count">${nodes.length}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    // 渲染筛选后的节点
+    function renderFilteredNodes() {
+      let filteredNodes = allNodes;
+
+      // 应用关键字筛选
+      if (currentFilter) {
+        filteredNodes = filteredNodes.filter(node => {
+          const name = (node.name || node.tag).toLowerCase();
+          return name.includes(currentFilter);
+        });
+      }
+
+      // 应用国家筛选
+      if (currentCountry) {
+        filteredNodes = filteredNodes.filter(node => {
+          return extractCountryEmoji(node.name || node.tag) === currentCountry;
+        });
+      }
+
+      render(filteredNodes);
+    }
 
     // 检查是否需要登录
     async function checkAuth() {
@@ -1268,8 +1691,10 @@
         }
         if (!res.ok) throw new Error('请求失败');
         const data = await res.json();
-        render(data.nodes || []);
-        updateStats(data.nodes || []);
+        allNodes = data.nodes || [];
+        updateCountryFilters();
+        renderFilteredNodes();
+        updateStats(allNodes);
         document.getElementById('lastUpdate').textContent = `更新于 ${new Date().toLocaleTimeString('zh-CN')}`;
       } catch (err) {
         showToast('刷新失败: ' + err.message, 'error');
@@ -1316,42 +1741,40 @@
               <div class="latency-info">
                 <div class="latency-icon">⚡</div>
                 <div class="latency-text">
-                  <div class="latency-label">节点延迟</div>
-                  <div class="latency-value">${latency >= 0 ? latency : '—'}</div>
-                  ${latency >= 0 ? `<div class="latency-quality" style="color: ${quality.color}">${quality.text} · ${latency} ms</div>` : '<div class="latency-quality">点击探测按钮测试延迟</div>'}
+                  <div class="latency-label">延迟</div>
+                  <div class="latency-value">${latency >= 0 ? latency + 'ms' : '—'}</div>
+                  ${latency >= 0 ? `<div class="latency-quality" style="color: ${quality.color}">${quality.text}</div>` : '<div class="latency-quality">未测试</div>'}
                 </div>
               </div>
             </div>
 
             <div class="metrics">
               <div class="metric">
-                <div class="metric-label">监听端口</div>
+                <div class="metric-label">端口</div>
                 <div class="metric-value">${node.port || '—'}</div>
               </div>
               <div class="metric">
-                <div class="metric-label">活跃连接</div>
+                <div class="metric-label">连接</div>
                 <div class="metric-value success">${node.active_connections || 0}</div>
               </div>
               <div class="metric">
-                <div class="metric-label">失败次数</div>
+                <div class="metric-label">失败</div>
                 <div class="metric-value ${node.failure_count > 0 ? 'error' : ''}">${node.failure_count || 0}</div>
               </div>
               <div class="metric">
-                <div class="metric-label">运行模式</div>
-                <div class="metric-value" style="font-size: 16px; text-transform: uppercase;">${node.mode || '—'}</div>
+                <div class="metric-label">模式</div>
+                <div class="metric-value" style="font-size: 14px; text-transform: uppercase;">${node.mode || '—'}</div>
               </div>
             </div>
 
-            <div class="time-info">
-              <div>✓ 最近成功: ${formatTime(node.last_success)}</div>
-              <div>✗ 最近失败: ${formatTime(node.last_failure)}</div>
-              ${node.blacklisted ? `<div style="color: var(--error);">⚠ 拉黑至: ${new Date(node.blacklisted_until).toLocaleString('zh-CN')}</div>` : ''}
-            </div>
-
             <div class="node-footer">
-              <div style="flex: 1;"></div>
+              <div class="time-info">
+                <div>✓ ${formatTime(node.last_success)}</div>
+                <div>✗ ${formatTime(node.last_failure)}</div>
+                ${node.blacklisted ? `<div style="color: var(--error);">⚠ 拉黑至 ${new Date(node.blacklisted_until).toLocaleString('zh-CN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>` : ''}
+              </div>
               <button class="btn btn-secondary btn-sm" onclick="probe('${node.tag}')">
-                🔍 探测延迟
+                🔍 探测
               </button>
               ${node.blacklisted ? `
                 <button class="btn btn-primary btn-sm" onclick="release('${node.tag}')">
@@ -1688,6 +2111,136 @@
 
       if (tabName === 'manage') {
         loadConfigNodes();
+      } else if (tabName === 'vpools') {
+        loadVirtualPools();
+      }
+    }
+
+    // 加载虚拟池数据
+    async function loadVirtualPools() {
+      try {
+        const res = await fetch('/api/virtual_pools/status');
+        if (res.status === 401) {
+          showToast('请先登录', 'error');
+          document.getElementById('loginOverlay').classList.add('show');
+          return;
+        }
+        if (!res.ok) throw new Error('加载失败');
+        const data = await res.json();
+        renderVirtualPools(data.pools || []);
+      } catch (err) {
+        showToast('加载虚拟池失败: ' + err.message, 'error');
+      }
+    }
+
+    // 渲染虚拟池列表
+    async function renderVirtualPools(pools) {
+      const container = document.getElementById('vpoolsContainer');
+      const emptyState = document.getElementById('vpoolsEmptyState');
+
+      if (!pools || pools.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+
+      // 先渲染基本信息
+      container.innerHTML = pools.map(pool => renderPoolCard(pool, null)).join('');
+
+      // 异步获取每个虚拟池的节点信息并更新
+      for (const pool of pools) {
+        try {
+          const nodes = await fetchPoolNodes(pool.name);
+          const poolCard = document.getElementById('vpool-' + pool.name);
+          if (poolCard) {
+            poolCard.outerHTML = renderPoolCard(pool, nodes);
+          }
+        } catch (err) {
+          console.error('获取虚拟池节点失败:', pool.name, err);
+        }
+      }
+    }
+
+    // 渲染单个虚拟池卡片
+    function renderPoolCard(pool, nodes) {
+      const healthyNodes = nodes ? nodes.filter(n => !n.blacklisted && n.failure_count === 0).length : 0;
+      const totalNodes = pool.node_count || (nodes ? nodes.length : 0);
+      const avgLatency = nodes && nodes.length > 0
+        ? Math.round(nodes.reduce((sum, n) => sum + (n.last_latency_ms || 0), 0) / nodes.length)
+        : 0;
+
+      // 组合监听地址
+      const listenAddr = pool.address && pool.port ? `${pool.address}:${pool.port}` : '—';
+
+      return `
+        <div class="vpool-card" id="vpool-${pool.name}">
+          <div class="vpool-header">
+            <div class="vpool-info">
+              <div class="vpool-name">${escapeHtml(pool.name || '未命名虚拟池')}</div>
+              <div class="vpool-pattern">正则: ${escapeHtml(pool.regular || '.*')}</div>
+            </div>
+          </div>
+
+          <div class="vpool-stats">
+            <div class="vpool-stat">
+              <div class="vpool-stat-label">监听地址</div>
+              <div class="vpool-stat-value" style="font-size: 16px;">${listenAddr}</div>
+            </div>
+            <div class="vpool-stat">
+              <div class="vpool-stat-label">节点数量</div>
+              <div class="vpool-stat-value">${totalNodes}</div>
+            </div>
+            <div class="vpool-stat">
+              <div class="vpool-stat-label">健康节点</div>
+              <div class="vpool-stat-value" style="color: var(--success);">${healthyNodes}</div>
+            </div>
+            <div class="vpool-stat">
+              <div class="vpool-stat-label">平均延迟</div>
+              <div class="vpool-stat-value" style="color: var(--primary);">${avgLatency > 0 ? avgLatency + 'ms' : '—'}</div>
+            </div>
+            <div class="vpool-stat">
+              <div class="vpool-stat-label">选择策略</div>
+              <div class="vpool-stat-value" style="font-size: 14px; text-transform: uppercase;">${pool.strategy || 'random'}</div>
+            </div>
+            ${pool.max_latency_ms && pool.max_latency_ms > 0 ? `
+            <div class="vpool-stat">
+              <div class="vpool-stat-label">延迟阈值</div>
+              <div class="vpool-stat-value" style="font-size: 16px;">${pool.max_latency_ms}ms</div>
+            </div>
+            ` : ''}
+          </div>
+
+          ${nodes && nodes.length > 0 ? `
+          <div class="vpool-nodes-grid">
+            ${nodes.map(node => {
+              const status = getNodeStatus(node);
+              const latency = node.last_latency_ms || -1;
+              return `
+                <div class="vpool-node-item">
+                  <div class="vpool-node-status ${status}"></div>
+                  <div class="vpool-node-name" title="${escapeHtml(node.name || node.tag)}">${escapeHtml(node.name || node.tag)}</div>
+                  <div class="vpool-node-latency">${latency >= 0 ? latency + 'ms' : '—'}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          ` : '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">' + (nodes === null ? '正在加载节点...' : '暂无匹配节点') + '</div>'}
+        </div>
+      `;
+    }
+
+    // 获取虚拟池的节点列表
+    async function fetchPoolNodes(poolName) {
+      try {
+        const res = await fetch('/api/virtual_pools/' + encodeURIComponent(poolName) + '/nodes');
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.nodes || [];
+      } catch (err) {
+        console.error('获取虚拟池节点失败:', err);
+        return [];
       }
     }
 

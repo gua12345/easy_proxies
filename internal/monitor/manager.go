@@ -22,6 +22,7 @@ type Config struct {
 	Listen         string
 	ProbeTarget    string
 	Password       string
+	PathPwd        string // 路径密码，访问管理页面需要通过 /路径密码 访问，为空则使用默认路径 /
 	ProxyUsername  string // 代理池的用户名（用于导出）
 	ProxyPassword  string // 代理池的密码（用于导出）
 	ExternalIP     string // 外部 IP 地址，用于导出时替换 0.0.0.0

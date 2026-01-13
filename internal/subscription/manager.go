@@ -363,6 +363,31 @@ func (m *Manager) MarkNodesModified() {
 	m.mu.Unlock()
 }
 
+// parseSubscriptionEntry 解析订阅条目，支持 "订阅名字:URL" 或 "URL" 格式
+// 返回订阅名字和URL，如果没有订阅名字则返回空字符串
+func parseSubscriptionEntry(entry string) (name, url string) {
+	entry = strings.TrimSpace(entry)
+
+	// 查找第一个冒号的位置
+	colonIdx := strings.Index(entry, ":")
+
+	// 如果没有冒号，或者冒号是 http:// 或 https:// 的一部分，则没有订阅名字
+	if colonIdx == -1 || strings.HasPrefix(entry, "http://") || strings.HasPrefix(entry, "https://") {
+		return "", entry
+	}
+
+	// 检查冒号后面是否是 //，如果是则说明这是 URL 的一部分
+	if colonIdx+2 < len(entry) && entry[colonIdx+1:colonIdx+3] == "//" {
+		return "", entry
+	}
+
+	// 分割订阅名字和URL
+	name = strings.TrimSpace(entry[:colonIdx])
+	url = strings.TrimSpace(entry[colonIdx+1:])
+
+	return name, url
+}
+
 // fetchAllSubscriptions fetches nodes from all configured subscription URLs.
 func (m *Manager) fetchAllSubscriptions() ([]config.NodeConfig, error) {
 	var allNodes []config.NodeConfig
@@ -373,7 +398,10 @@ func (m *Manager) fetchAllSubscriptions() ([]config.NodeConfig, error) {
 		timeout = 30 * time.Second
 	}
 
-	for _, subURL := range m.baseCfg.Subscriptions {
+	for _, subEntry := range m.baseCfg.Subscriptions {
+		// 解析订阅名字和URL：格式为 "订阅名字:URL" 或 "URL"
+		subName, subURL := parseSubscriptionEntry(subEntry)
+
 		nodes, err := m.fetchSubscription(subURL, timeout)
 		if err != nil {
 			m.logger.Warnf("failed to fetch %s: %v", subURL, err)
@@ -381,6 +409,27 @@ func (m *Manager) fetchAllSubscriptions() ([]config.NodeConfig, error) {
 			continue
 		}
 		m.logger.Infof("fetched %d nodes from subscription", len(nodes))
+
+		// 如果有订阅名字，添加到节点名称后
+		if subName != "" {
+			for idx := range nodes {
+				// 先从 URI 的 fragment 中提取节点名称（如果还没有提取）
+				if nodes[idx].Name == "" {
+					if parsed, err := url.Parse(nodes[idx].URI); err == nil && parsed.Fragment != "" {
+						if decoded, err := url.QueryUnescape(parsed.Fragment); err == nil {
+							nodes[idx].Name = decoded
+						} else {
+							nodes[idx].Name = parsed.Fragment
+						}
+					}
+				}
+				// 添加订阅名字后缀
+				if nodes[idx].Name != "" {
+					nodes[idx].Name = nodes[idx].Name + "|" + subName
+				}
+			}
+		}
+
 		allNodes = append(allNodes, nodes...)
 	}
 

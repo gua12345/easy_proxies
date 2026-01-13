@@ -33,9 +33,11 @@ skip_cert_verify: false
 # ═══════════════════════════════════════════════════════════════
 subscriptions:
   # 支持多个订阅链接
-  # - "https://example.com/subscribe/v2ray"    # V2Ray 标准订阅（Base64）
-  # - "https://example.com/subscribe/clash"    # Clash YAML 订阅
-  # - "https://example.com/subscribe/txt"     # 纯文本订阅（每行一个 URI）
+  # 格式：订阅名字:订阅链接（订阅名字可选，不填则不添加后缀）
+  # - "订阅名字1:https://example.com/subscribe/v2ray"    # V2Ray 标准订阅（Base64）
+  # - "订阅名字2:https://example.com/subscribe/clash"    # Clash YAML 订阅
+  # - "订阅名字3:https://example.com/subscribe/txt"     # 纯文本订阅（每行一个 URI）
+  # - "https://example.com/subscribe/v2ray"              # 不带订阅名字的订阅链接
 
 # ═══════════════════════════════════════════════════════════════
 # 订阅定时刷新配置（可选）
@@ -57,6 +59,7 @@ management:
   listen: 0.0.0.0:9090           # 监听地址和端口
   probe_target: www.apple.com:80     # 健康检查探测目标
   password: ""                      # WebUI 访问密码（为空则无需密码）
+  path_pwd: ""                      # 路径密码（为空则使用默认路径 /，设置后需访问 /路径密码 才能到达管理页面）
 
 # ═══════════════════════════════════════════════════════════════
 # 节点池/混合模式入口配置

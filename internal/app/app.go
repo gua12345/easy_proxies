@@ -30,6 +30,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		Listen:        cfg.Management.Listen,
 		ProbeTarget:   cfg.Management.ProbeTarget,
 		Password:      cfg.Management.Password,
+		PathPwd:       cfg.Management.PathPwd,
 		ProxyUsername: proxyUsername,
 		ProxyPassword: proxyPassword,
 		ExternalIP:    cfg.ExternalIP,
