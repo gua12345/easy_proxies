@@ -112,14 +112,16 @@ func NewServer(cfg Config, mgr *Manager, logger *log.Logger) *Server {
 
 	mux := http.NewServeMux()
 
-	// 路径密码只保护管理页面HTML入口，不影响API
+	// 路径密码保护管理页面HTML入口，不影响API
 	// API始终在 /api/* 路径下可访问
-	mux.HandleFunc("/", s.handleIndex)
 	if cfg.PathPwd != "" {
-		// 如果配置了路径密码，在自定义路径下也提供管理页面
+		// 如果配置了路径密码，只在自定义路径下提供管理页面
 		customPath := "/" + strings.Trim(cfg.PathPwd, "/")
 		mux.HandleFunc(customPath, s.handleIndex)
 		mux.HandleFunc(customPath+"/", s.handleIndex)
+	} else {
+		// 如果没有配置路径密码，在根路径提供管理页面
+		mux.HandleFunc("/", s.handleIndex)
 	}
 
 	// API路由始终在 /api/* 下，不受路径密码影响
